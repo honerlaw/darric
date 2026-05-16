@@ -56,7 +56,7 @@ impl SpeakerTracker {
                 // Exponential moving average update so the profile drifts with the speaker
                 let stored = &mut self.known[idx].1;
                 for (s, n) in stored.iter_mut().zip(fp.iter()) {
-                    *s = 0.9 * *s + 0.1 * n;
+                    *s = 0.9_f32.mul_add(*s, 0.1 * n);
                 }
                 return id;
             }
@@ -108,9 +108,9 @@ fn compute_fingerprint(samples: &[f32], hamming: &[f32], filterbank: &[Vec<f32>]
 
     // DCT-II
     let mut mfcc = vec![0.0f32; N_MFCC];
-    for k in 0..N_MFCC {
+    for (k, coeff) in mfcc.iter_mut().enumerate() {
         for (n, &m) in mel_sum.iter().enumerate() {
-            mfcc[k] += m * (PI * k as f32 * (2 * n + 1) as f32 / (2 * N_MELS) as f32).cos();
+            *coeff += m * (PI * k as f32 * (2 * n + 1) as f32 / (2 * N_MELS) as f32).cos();
         }
     }
 
@@ -118,9 +118,10 @@ fn compute_fingerprint(samples: &[f32], hamming: &[f32], filterbank: &[Vec<f32>]
 }
 
 fn build_hamming(len: usize) -> Vec<f32> {
+    let n = len - 1;
     (0..len)
         .map(|i| {
-            0.54 - 0.46 * (2.0 * PI * i as f32 / (len - 1) as f32).cos()
+            0.46_f32.mul_add(-(2.0 * PI * i as f32 / n as f32).cos(), 0.54)
         })
         .collect()
 }
@@ -154,14 +155,16 @@ fn build_mel_filterbank(n_mels: usize, n_fft: usize, sample_rate: f32) -> Vec<Ve
         let center = bin_points[m + 1];
         let end = bin_points[m + 2];
 
-        for b in start..center {
-            if center > start {
-                filters[m][b] = (b - start) as f32 / (center - start) as f32;
+        if center > start {
+            for (b, coeff) in filters[m][start..center].iter_mut().enumerate() {
+                *coeff = b as f32 / (center - start) as f32;
             }
         }
-        for b in center..=end.min(n_fft_bins - 1) {
-            if end > center {
-                filters[m][b] = (end - b) as f32 / (end - center) as f32;
+        let clipped = end.min(n_fft_bins - 1);
+        if end > center && clipped >= center {
+            let slope = (end - center) as f32;
+            for (b, coeff) in filters[m][center..=clipped].iter_mut().enumerate() {
+                *coeff = (end - center - b) as f32 / slope;
             }
         }
     }
@@ -177,4 +180,113 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
         return 0.0;
     }
     dot / (norm_a * norm_b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    mod cosine_similarity_tests {
+        use super::*;
+
+        #[test]
+        fn identical_non_zero_vectors_return_one() {
+            let v = [1.0_f32, 2.0, 3.0];
+            let result = cosine_similarity(&v, &v);
+            assert!((result - 1.0_f32).abs() < 1e-5_f32, "expected ~1.0, got {result}");
+        }
+
+        #[test]
+        fn orthogonal_vectors_return_zero() {
+            let a = [1.0_f32, 0.0];
+            let b = [0.0_f32, 1.0];
+            let result = cosine_similarity(&a, &b);
+            assert!(result.abs() < 1e-5_f32, "expected ~0.0, got {result}");
+        }
+
+        #[test]
+        fn zero_vectors_return_zero() {
+            let z = [0.0_f32, 0.0, 0.0];
+            let result = cosine_similarity(&z, &z);
+            assert!(result.abs() < 1e-5_f32, "expected 0.0, got {result}");
+        }
+
+        #[test]
+        fn anti_parallel_vectors_return_negative_one() {
+            let a = [1.0_f32, 0.0];
+            let b = [-1.0_f32, 0.0];
+            let result = cosine_similarity(&a, &b);
+            assert!((result + 1.0_f32).abs() < 1e-5_f32, "expected ~-1.0, got {result}");
+        }
+    }
+
+    mod fingerprint_tests {
+        use super::*;
+
+        #[test]
+        fn short_sample_returns_zero_vector() {
+            let hamming = build_hamming(FRAME_LEN);
+            let filterbank = build_mel_filterbank(N_MELS, FRAME_LEN, SAMPLE_RATE);
+            // Fewer samples than one frame length — must return all zeros
+            let samples = vec![0.5_f32; FRAME_LEN - 1];
+            let fp = compute_fingerprint(&samples, &hamming, &filterbank);
+            assert_eq!(fp.len(), N_MFCC);
+            assert!(fp.iter().all(|&x| x == 0.0_f32), "expected all zeros for short input");
+        }
+
+        #[test]
+        fn valid_sample_returns_non_zero_fingerprint() {
+            let hamming = build_hamming(FRAME_LEN);
+            let filterbank = build_mel_filterbank(N_MELS, FRAME_LEN, SAMPLE_RATE);
+            // DC signal — constant amplitude produces measurable log energy
+            let samples = vec![0.5_f32; 16_000];
+            let fp = compute_fingerprint(&samples, &hamming, &filterbank);
+            assert_eq!(fp.len(), N_MFCC);
+            assert!(fp.iter().any(|&x| x != 0.0_f32), "expected non-zero fingerprint");
+        }
+    }
+
+    mod speaker_tracker_tests {
+        use super::*;
+
+        #[test]
+        fn first_valid_sample_gets_id_zero() {
+            let mut tracker = SpeakerTracker::new();
+            let samples = vec![0.5_f32; 16_000];
+            let id = tracker.identify_or_register(&samples);
+            assert_eq!(id, 0);
+        }
+
+        #[test]
+        fn short_sample_does_not_consume_a_speaker_slot() {
+            let mut tracker = SpeakerTracker::new();
+            // A short sample (below FRAME_LEN) produces an all-zero fingerprint and
+            // must not register a new speaker. Verify by confirming that the next valid
+            // sample still gets id 0 — if a slot had been consumed it would get id 1.
+            tracker.identify_or_register(&[0.1_f32; 10]);
+            let id_valid = tracker.identify_or_register(&vec![0.5_f32; 16_000]);
+            assert_eq!(id_valid, 0, "short sample must not consume a speaker slot");
+        }
+
+        #[test]
+        fn same_audio_recognized_as_same_speaker() {
+            let mut tracker = SpeakerTracker::new();
+            let samples = vec![0.5_f32; 16_000];
+            let id_first = tracker.identify_or_register(&samples);
+            let id_second = tracker.identify_or_register(&samples);
+            assert_eq!(id_first, 0);
+            assert_eq!(id_second, 0, "same audio must not be registered as a new speaker");
+        }
+
+        #[test]
+        fn reset_clears_speakers_and_restarts_ids() {
+            let mut tracker = SpeakerTracker::new();
+            let samples = vec![0.5_f32; 16_000];
+            tracker.identify_or_register(&samples);
+            tracker.reset();
+            // After reset, the same sample should get id 0 again
+            let id = tracker.identify_or_register(&samples);
+            assert_eq!(id, 0);
+        }
+    }
 }

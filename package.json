@@ -18,7 +18,11 @@
     "lint:rust": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets",
     "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
     "format:rust:fix": "cargo fmt --manifest-path src-tauri/Cargo.toml",
-    "check": "npm run typecheck && npm run typecheck:node && npm run lint && npm run format && npm run lint:rust && npm run format:rust"
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "check": "npm run typecheck && npm run typecheck:node && npm run lint && npm run format && npm run lint:rust && npm run format:rust && npm run test"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -36,19 +40,26 @@
     "@eslint/js": "^9.39.4",
     "@tailwindcss/vite": "^4.1.0",
     "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/node": "^25.8.0",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^4.1.6",
     "eslint": "^9.39.4",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.26",
     "globals": "^15.15.0",
+    "jsdom": "^29.1.1",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.6.14",
     "tailwindcss": "^4.1.0",
     "typescript": "~5.6.2",
     "typescript-eslint": "^8.59.3",
-    "vite": "^6.0.3"
+    "vite": "^6.0.3",
+    "vitest": "^4.1.6"
   }
 }

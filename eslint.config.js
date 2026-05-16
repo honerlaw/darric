@@ -138,17 +138,13 @@ export default tseslint.config(
   },
 
   {
-    files: ["vite.config.ts"],
+    files: ["vite.config.ts", "vitest.config.ts"],
     languageOptions: {
       globals: globals.node,
       parserOptions: {
         project: "./tsconfig.node.json",
         tsconfigRootDir: import.meta.dirname,
       },
-    },
-    rules: {
-      "@typescript-eslint/no-unsafe-member-access": "off",
-      "@typescript-eslint/no-unsafe-assignment": "off",
     },
   },
 );
