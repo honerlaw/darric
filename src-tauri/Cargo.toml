@@ -1,0 +1,86 @@
+[package]
+name = "darric"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "darric_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Persistence
+rusqlite = { version = "0.32", features = ["bundled", "chrono", "uuid"] }
+rusqlite_migration = "1"
+
+# Audio capture
+cpal = "0.15"
+
+# Transcription
+whisper-rs = { version = "0.14", features = ["metal"] }
+
+# Model download
+reqwest = { version = "0.12", features = ["stream", "rustls-tls", "json"], default-features = false }
+futures-util = "0.3"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Speaker fingerprinting
+rustfft = "6"
+
+# Utilities
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2"
+log = "0.4"
+env_logger = "0.11"
+
+[lints.rust]
+missing_docs = "allow"
+missing_debug_implementations = "allow"
+unreachable_pub = "allow"
+unused_import_braces = "warn"
+unused_qualifications = "warn"
+unsafe_op_in_unsafe_fn = "deny"
+let_underscore_drop = "deny"
+unused_must_use = "deny"
+
+[lints.clippy]
+# Tier 1: errors (bugs and correctness)
+all = { level = "deny", priority = -1 }
+correctness = { level = "deny", priority = -1 }
+# Tier 2: warnings (style and pedantic)
+pedantic = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+# Tier 3: dependency hygiene
+cargo = { level = "warn", priority = -1 }
+
+# Overrides for legitimate Tauri patterns
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+significant_drop_tightening = "allow"
+await_holding_lock = "allow"
+module_name_repetitions = "allow"
+doc_markdown = "allow"
+multiple_crate_versions = "allow"
+struct_excessive_bools = "allow"
+too_many_lines = "allow"
+too_many_arguments = "allow"
+cargo_common_metadata = "allow"
+

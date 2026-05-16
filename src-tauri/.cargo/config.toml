@@ -1,0 +1,5 @@
+[build]
+rustflags = [
+  "-W", "unused-extern-crates",
+  "-W", "future-incompatible",
+]
