@@ -27,7 +27,10 @@ pub fn session_tags(db: &rusqlite::Connection, session_id: &str) -> rusqlite::Re
          WHERE j.session_id = ?1 ORDER BY t.name",
     )?;
     let rows = stmt.query_map(rusqlite::params![session_id], |row| {
-        Ok(Tag { id: row.get(0)?, name: row.get(1)? })
+        Ok(Tag {
+            id: row.get(0)?,
+            name: row.get(1)?,
+        })
     })?;
     rows.collect()
 }
@@ -39,7 +42,10 @@ pub fn note_tags(db: &rusqlite::Connection, note_id: &str) -> rusqlite::Result<V
          WHERE j.note_id = ?1 ORDER BY t.name",
     )?;
     let rows = stmt.query_map(rusqlite::params![note_id], |row| {
-        Ok(Tag { id: row.get(0)?, name: row.get(1)? })
+        Ok(Tag {
+            id: row.get(0)?,
+            name: row.get(1)?,
+        })
     })?;
     rows.collect()
 }
@@ -51,7 +57,10 @@ pub fn task_tags(db: &rusqlite::Connection, task_id: &str) -> rusqlite::Result<V
          WHERE j.task_id = ?1 ORDER BY t.name",
     )?;
     let rows = stmt.query_map(rusqlite::params![task_id], |row| {
-        Ok(Tag { id: row.get(0)?, name: row.get(1)? })
+        Ok(Tag {
+            id: row.get(0)?,
+            name: row.get(1)?,
+        })
     })?;
     rows.collect()
 }
@@ -61,7 +70,12 @@ pub async fn list_tags(state: tauri::State<'_, AppState>) -> Result<Vec<Tag>> {
     let db = state.db.0.lock().unwrap();
     let mut stmt = db.prepare("SELECT id, name FROM tags ORDER BY name")?;
     let tags = stmt
-        .query_map([], |row| Ok(Tag { id: row.get(0)?, name: row.get(1)? }))?
+        .query_map([], |row| {
+            Ok(Tag {
+                id: row.get(0)?,
+                name: row.get(1)?,
+            })
+        })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
     Ok(tags)
 }

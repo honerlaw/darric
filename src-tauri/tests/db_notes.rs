@@ -27,11 +27,19 @@ fn create_and_retrieve() -> rusqlite::Result<()> {
     let conn = common::open_test_db();
     insert_note(&conn, NOTE_ID, "Hello", "World", TS_EARLY)?;
 
-    let (id, title, body, created_at, updated_at): (String, String, String, String, String) =
-        conn.query_row(
+    let (id, title, body, created_at, updated_at): (String, String, String, String, String) = conn
+        .query_row(
             "SELECT id, title, body, created_at, updated_at FROM notes WHERE id = ?1",
             params![NOTE_ID],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            },
         )?;
 
     assert_eq!(id, NOTE_ID);
@@ -52,12 +60,11 @@ fn update_preserves_created_at() -> rusqlite::Result<()> {
         params!["Updated title", "Updated body", TS_LATE, NOTE_ID],
     )?;
 
-    let (title, body, created_at, updated_at): (String, String, String, String) =
-        conn.query_row(
-            "SELECT title, body, created_at, updated_at FROM notes WHERE id = ?1",
-            params![NOTE_ID],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-        )?;
+    let (title, body, created_at, updated_at): (String, String, String, String) = conn.query_row(
+        "SELECT title, body, created_at, updated_at FROM notes WHERE id = ?1",
+        params![NOTE_ID],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+    )?;
 
     assert_eq!(title, "Updated title");
     assert_eq!(body, "Updated body");
@@ -176,7 +183,10 @@ fn tag_add_is_idempotent() -> rusqlite::Result<()> {
         params![NOTE_ID],
         |row| row.get(0),
     )?;
-    assert_eq!(count, 1, "duplicate INSERT OR IGNORE must not create a second row");
+    assert_eq!(
+        count, 1,
+        "duplicate INSERT OR IGNORE must not create a second row"
+    );
     Ok(())
 }
 

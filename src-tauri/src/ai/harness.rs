@@ -1,5 +1,5 @@
-use super::{AiProvider, ChatMessage, ContentBlock, Role, StreamEvent, ToolCall};
 use super::mcp::McpManager;
+use super::{AiProvider, ChatMessage, ContentBlock, Role, StreamEvent, ToolCall};
 use crate::error::Result;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
@@ -41,9 +41,10 @@ impl AgentHarness {
             let tools_snap = tools.clone();
 
             // Spawn provider so we can read events concurrently (real streaming to frontend)
-            let task = tokio::spawn(async move {
-                provider.complete(&messages_snap, &tools_snap, &tx).await
-            });
+            let task =
+                tokio::spawn(
+                    async move { provider.complete(&messages_snap, &tools_snap, &tx).await },
+                );
 
             let mut response_blocks: Vec<ContentBlock> = Vec::new();
             let mut current_text = String::new();

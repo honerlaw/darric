@@ -4,7 +4,12 @@ use rusqlite::params;
 
 const TS: &str = "2024-01-01T10:00:00Z";
 
-fn insert_note(conn: &rusqlite::Connection, id: &str, title: &str, body: &str) -> rusqlite::Result<()> {
+fn insert_note(
+    conn: &rusqlite::Connection,
+    id: &str,
+    title: &str,
+    body: &str,
+) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO notes(id, title, body, created_at, updated_at) VALUES(?1, ?2, ?3, ?4, ?4)",
         params![id, title, body, TS],
@@ -12,7 +17,12 @@ fn insert_note(conn: &rusqlite::Connection, id: &str, title: &str, body: &str) -
     Ok(())
 }
 
-fn insert_task(conn: &rusqlite::Connection, id: &str, title: &str, col: &str) -> rusqlite::Result<()> {
+fn insert_task(
+    conn: &rusqlite::Connection,
+    id: &str,
+    title: &str,
+    col: &str,
+) -> rusqlite::Result<()> {
     conn.execute(
         "INSERT INTO tasks(id, title, col, position, created_at, updated_at) VALUES(?1, ?2, ?3, 0, ?4, ?4)",
         params![id, title, col, TS],

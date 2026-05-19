@@ -115,8 +115,7 @@ fn list_ordered_by_col_then_position() -> rusqlite::Result<()> {
     insert_task(&conn, "task-a", "Doing first", "doing")?;
     insert_task(&conn, "task-c", "Todo first", "todo")?;
 
-    let mut stmt =
-        conn.prepare("SELECT id FROM tasks ORDER BY col, position ASC")?;
+    let mut stmt = conn.prepare("SELECT id FROM tasks ORDER BY col, position ASC")?;
     let ids: Vec<String> = stmt
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;

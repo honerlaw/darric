@@ -8,7 +8,8 @@ use rusqlite_migration::{Migrations, M};
 /// `include_str!` entry here to keep the test schema in sync.
 pub fn open_test_db() -> Connection {
     let mut conn = Connection::open_in_memory().expect("in-memory DB");
-    conn.execute_batch("PRAGMA foreign_keys=ON;").expect("PRAGMA");
+    conn.execute_batch("PRAGMA foreign_keys=ON;")
+        .expect("PRAGMA");
     Migrations::new(vec![
         M::up(include_str!("../../migrations/001_initial.sql")),
         M::up(include_str!("../../migrations/002_notes_tasks.sql")),
