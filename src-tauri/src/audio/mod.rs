@@ -169,7 +169,11 @@ fn flush_segment(
     );
 }
 
-#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 fn transcribe_and_emit(
     segment: Vec<f32>,
     source: AudioSource,

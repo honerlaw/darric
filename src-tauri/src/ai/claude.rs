@@ -125,10 +125,7 @@ enum BlockState {
     },
 }
 
-async fn parse_sse(
-    response: reqwest::Response,
-    tx: &UnboundedSender<StreamEvent>,
-) -> Result<()> {
+async fn parse_sse(response: reqwest::Response, tx: &UnboundedSender<StreamEvent>) -> Result<()> {
     let mut stream = response.bytes_stream();
     let mut buf = String::new();
     let mut blocks: HashMap<usize, BlockState> = HashMap::new();
@@ -220,10 +217,16 @@ fn process_sse_message(
 
         "content_block_stop" => {
             let index = usize::try_from(val["index"].as_u64().unwrap_or(0)).unwrap_or(0);
-            if let Some(BlockState::ToolUse { id, name, input_buf }) = blocks.remove(&index) {
+            if let Some(BlockState::ToolUse {
+                id,
+                name,
+                input_buf,
+            }) = blocks.remove(&index)
+            {
                 let input = serde_json::from_str::<Value>(&input_buf)
                     .unwrap_or_else(|_| Value::Object(serde_json::Map::new()));
-                tx.send(StreamEvent::ToolUse(ToolCall { id, name, input })).ok();
+                tx.send(StreamEvent::ToolUse(ToolCall { id, name, input }))
+                    .ok();
             }
         }
 

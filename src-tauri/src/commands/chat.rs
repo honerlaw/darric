@@ -20,9 +20,7 @@ pub async fn send_chat_message(
     let harness = {
         let guard = state.ai_harness.lock().await;
         guard.clone().ok_or_else(|| {
-            AppError::Ai(
-                "No AI provider configured. Add an API key in Settings.".to_string(),
-            )
+            AppError::Ai("No AI provider configured. Add an API key in Settings.".to_string())
         })?
     };
 

@@ -10,7 +10,10 @@ use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
-async fn load_transcriber(app: &AppHandle, state: &tauri::State<'_, AppState>) -> Option<Arc<Transcriber>> {
+async fn load_transcriber(
+    app: &AppHandle,
+    state: &tauri::State<'_, AppState>,
+) -> Option<Arc<Transcriber>> {
     let cached = state.transcriber.lock().unwrap().clone();
     if cached.is_some() {
         log::info!("[session] using pre-loaded transcriber");
@@ -20,11 +23,14 @@ async fn load_transcriber(app: &AppHandle, state: &tauri::State<'_, AppState>) -
     let path = {
         let custom = {
             let db = state.db.0.lock().unwrap();
-            let mut stmt =
-                db.prepare("SELECT value FROM settings WHERE key = 'whisper_model_path'").ok()?;
+            let mut stmt = db
+                .prepare("SELECT value FROM settings WHERE key = 'whisper_model_path'")
+                .ok()?;
             let mut rows = stmt.query([]).ok()?;
-            rows.next().ok()??
-                .get::<_, String>(0).ok()
+            rows.next()
+                .ok()??
+                .get::<_, String>(0)
+                .ok()
                 .filter(|s| !s.is_empty())
         };
         match custom {
@@ -42,11 +48,20 @@ async fn load_transcriber(app: &AppHandle, state: &tauri::State<'_, AppState>) -
                     app.emit("model_ready", ()).ok();
                     Some(t)
                 }
-                Ok(Err(e)) => { log::error!("[session] transcriber load failed: {e}"); None }
-                Err(e) => { log::error!("[session] spawn_blocking failed: {e}"); None }
+                Ok(Err(e)) => {
+                    log::error!("[session] transcriber load failed: {e}");
+                    None
+                }
+                Err(e) => {
+                    log::error!("[session] spawn_blocking failed: {e}");
+                    None
+                }
             }
         }
-        Err(e) => { log::error!("[session] model unavailable: {e}"); None }
+        Err(e) => {
+            log::error!("[session] model unavailable: {e}");
+            None
+        }
     }
 }
 

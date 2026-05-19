@@ -2,7 +2,7 @@ use rustfft::num_complex::Complex;
 use std::f32::consts::PI;
 
 const FRAME_LEN: usize = 400; // 25 ms at 16 kHz
-const HOP_LEN: usize = 160;   // 10 ms at 16 kHz
+const HOP_LEN: usize = 160; // 10 ms at 16 kHz
 const N_MELS: usize = 26;
 const N_MFCC: usize = 13;
 const SAMPLE_RATE: f32 = 16_000.0;
@@ -120,13 +120,15 @@ fn compute_fingerprint(samples: &[f32], hamming: &[f32], filterbank: &[Vec<f32>]
 fn build_hamming(len: usize) -> Vec<f32> {
     let n = len - 1;
     (0..len)
-        .map(|i| {
-            0.46_f32.mul_add(-(2.0 * PI * i as f32 / n as f32).cos(), 0.54)
-        })
+        .map(|i| 0.46_f32.mul_add(-(2.0 * PI * i as f32 / n as f32).cos(), 0.54))
         .collect()
 }
 
-#[allow(clippy::cast_precision_loss, clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+#[allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
 fn build_mel_filterbank(n_mels: usize, n_fft: usize, sample_rate: f32) -> Vec<Vec<f32>> {
     let n_fft_bins = n_fft / 2 + 1;
     let hz_to_mel = |f: f32| 2595.0 * (1.0 + f / 700.0).log10();
@@ -136,16 +138,12 @@ fn build_mel_filterbank(n_mels: usize, n_fft: usize, sample_rate: f32) -> Vec<Ve
     let mel_high = hz_to_mel(sample_rate / 2.0);
 
     let hz_points: Vec<f32> = (0..=n_mels + 1)
-        .map(|i| {
-            mel_to_hz(mel_low + (mel_high - mel_low) * i as f32 / (n_mels + 1) as f32)
-        })
+        .map(|i| mel_to_hz(mel_low + (mel_high - mel_low) * i as f32 / (n_mels + 1) as f32))
         .collect();
 
     let bin_points: Vec<usize> = hz_points
         .iter()
-        .map(|&f| {
-            ((f / sample_rate * n_fft as f32).round() as usize).min(n_fft_bins - 1)
-        })
+        .map(|&f| ((f / sample_rate * n_fft as f32).round() as usize).min(n_fft_bins - 1))
         .collect();
 
     let mut filters = vec![vec![0.0f32; n_fft_bins]; n_mels];
@@ -193,7 +191,10 @@ mod tests {
         fn identical_non_zero_vectors_return_one() {
             let v = [1.0_f32, 2.0, 3.0];
             let result = cosine_similarity(&v, &v);
-            assert!((result - 1.0_f32).abs() < 1e-5_f32, "expected ~1.0, got {result}");
+            assert!(
+                (result - 1.0_f32).abs() < 1e-5_f32,
+                "expected ~1.0, got {result}"
+            );
         }
 
         #[test]
@@ -216,7 +217,10 @@ mod tests {
             let a = [1.0_f32, 0.0];
             let b = [-1.0_f32, 0.0];
             let result = cosine_similarity(&a, &b);
-            assert!((result + 1.0_f32).abs() < 1e-5_f32, "expected ~-1.0, got {result}");
+            assert!(
+                (result + 1.0_f32).abs() < 1e-5_f32,
+                "expected ~-1.0, got {result}"
+            );
         }
     }
 
@@ -231,7 +235,10 @@ mod tests {
             let samples = vec![0.5_f32; FRAME_LEN - 1];
             let fp = compute_fingerprint(&samples, &hamming, &filterbank);
             assert_eq!(fp.len(), N_MFCC);
-            assert!(fp.iter().all(|&x| x == 0.0_f32), "expected all zeros for short input");
+            assert!(
+                fp.iter().all(|&x| x == 0.0_f32),
+                "expected all zeros for short input"
+            );
         }
 
         #[test]
@@ -242,7 +249,10 @@ mod tests {
             let samples = vec![0.5_f32; 16_000];
             let fp = compute_fingerprint(&samples, &hamming, &filterbank);
             assert_eq!(fp.len(), N_MFCC);
-            assert!(fp.iter().any(|&x| x != 0.0_f32), "expected non-zero fingerprint");
+            assert!(
+                fp.iter().any(|&x| x != 0.0_f32),
+                "expected non-zero fingerprint"
+            );
         }
     }
 
@@ -275,7 +285,10 @@ mod tests {
             let id_first = tracker.identify_or_register(&samples);
             let id_second = tracker.identify_or_register(&samples);
             assert_eq!(id_first, 0);
-            assert_eq!(id_second, 0, "same audio must not be registered as a new speaker");
+            assert_eq!(
+                id_second, 0,
+                "same audio must not be registered as a new speaker"
+            );
         }
 
         #[test]

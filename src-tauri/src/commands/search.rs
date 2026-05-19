@@ -139,5 +139,9 @@ pub async fn search_all(state: tauri::State<'_, AppState>, query: String) -> Res
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
 
-    Ok(SearchResults { sessions, notes, tasks })
+    Ok(SearchResults {
+        sessions,
+        notes,
+        tasks,
+    })
 }

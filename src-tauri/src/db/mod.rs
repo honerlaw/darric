@@ -14,9 +14,9 @@ pub fn get_setting(conn: &rusqlite::Connection, key: &str) -> Option<String> {
 
 /// Load persisted chat messages and convert to in-memory ChatMessage history.
 pub fn load_chat_history(conn: &rusqlite::Connection) -> Vec<ChatMessage> {
-    let Ok(mut stmt) = conn.prepare(
-        "SELECT role, content FROM chat_messages ORDER BY created_at ASC",
-    ) else {
+    let Ok(mut stmt) =
+        conn.prepare("SELECT role, content FROM chat_messages ORDER BY created_at ASC")
+    else {
         return Vec::new();
     };
 

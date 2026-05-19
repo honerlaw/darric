@@ -139,10 +139,7 @@ fn to_api_message(msg: &ChatMessage) -> Value {
     json!({"role": role, "parts": parts})
 }
 
-async fn parse_sse(
-    response: reqwest::Response,
-    tx: &UnboundedSender<StreamEvent>,
-) -> Result<()> {
+async fn parse_sse(response: reqwest::Response, tx: &UnboundedSender<StreamEvent>) -> Result<()> {
     let mut stream = response.bytes_stream();
     let mut buf = String::new();
 
@@ -192,7 +189,8 @@ fn process_sse_message(msg: &str, tx: &UnboundedSender<StreamEvent>) -> Result<(
                 let name = fc["name"].as_str().unwrap_or("").to_string();
                 let input = fc["args"].clone();
                 let id = uuid::Uuid::new_v4().to_string();
-                tx.send(StreamEvent::ToolUse(ToolCall { id, name, input })).ok();
+                tx.send(StreamEvent::ToolUse(ToolCall { id, name, input }))
+                    .ok();
             }
         }
     }

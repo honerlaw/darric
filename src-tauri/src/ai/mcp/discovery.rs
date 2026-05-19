@@ -6,7 +6,10 @@ use std::collections::HashMap;
 pub fn load_claude_desktop_configs() -> Vec<McpServerConfig> {
     let path = dirs_path();
     let Ok(content) = std::fs::read_to_string(&path) else {
-        log::debug!("[mcp] Claude Desktop config not found at {}", path.display());
+        log::debug!(
+            "[mcp] Claude Desktop config not found at {}",
+            path.display()
+        );
         return Vec::new();
     };
 
@@ -52,7 +55,10 @@ pub fn load_claude_desktop_configs() -> Vec<McpServerConfig> {
         });
     }
 
-    log::info!("[mcp] discovered {} server(s) from Claude Desktop", configs.len());
+    log::info!(
+        "[mcp] discovered {} server(s) from Claude Desktop",
+        configs.len()
+    );
     configs
 }
 

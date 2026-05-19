@@ -76,8 +76,7 @@ fn list_ordered_by_started_at_desc() -> rusqlite::Result<()> {
     insert_session(&conn, SESSION_ID, Some("Morning"), TS_EARLY)?;
     insert_session(&conn, SESSION_ID2, Some("Afternoon"), TS_LATE)?;
 
-    let mut stmt =
-        conn.prepare("SELECT id FROM sessions ORDER BY started_at DESC")?;
+    let mut stmt = conn.prepare("SELECT id FROM sessions ORDER BY started_at DESC")?;
     let ids: Vec<String> = stmt
         .query_map([], |row| row.get(0))?
         .collect::<rusqlite::Result<Vec<_>>>()?;
