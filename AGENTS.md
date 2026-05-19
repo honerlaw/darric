@@ -25,3 +25,12 @@ This applies to both TypeScript/ESLint and Rust/Clippy.
 ### When a lint rule seems unreasonable
 
 Fix the code to satisfy the rule. If the rule genuinely cannot be satisfied without making the code worse, raise it with the team rather than silently disabling it.
+
+## minerva
+
+This project uses [minerva](https://github.com/honerlaw/agent-marketplace/tree/main/plugins/minerva) for durable record discipline.
+
+- `.minerva/decisions/` — authoritative architectural decisions. Read when starting work in this repo.
+- `.minerva/work/` — historical proposals and replans. Grep when you need the reasoning behind a past feature.
+
+Active work units live at `.minerva/work/NNN-<slug>/`. Invoke the `minerva:using-minerva` skill for the full methodology.

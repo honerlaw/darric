@@ -20,6 +20,8 @@ pub enum AppError {
     Ai(String),
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("mcp server error: {0}")]
+    McpServer(String),
 }
 
 impl serde::Serialize for AppError {

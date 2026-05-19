@@ -1,4 +1,5 @@
 use crate::ai::{harness::AgentHarness, mcp::McpManager, ChatMessage};
+use crate::mcp_server::McpServerHandle;
 use crate::transcription::{speaker_tracker::SpeakerTracker, Transcriber};
 use std::sync::{Arc, Mutex};
 use tokio::sync::Mutex as AsyncMutex;
@@ -18,6 +19,7 @@ pub struct AppState {
     pub ai_harness: Arc<AsyncMutex<Option<AgentHarness>>>,
     pub chat_history: Arc<AsyncMutex<Vec<ChatMessage>>>,
     pub mcp: Arc<McpManager>,
+    pub mcp_server: Arc<Mutex<Option<McpServerHandle>>>,
 }
 
 impl AppState {
@@ -35,6 +37,7 @@ impl AppState {
             ai_harness: Arc::new(AsyncMutex::new(harness)),
             chat_history: Arc::new(AsyncMutex::new(history)),
             mcp,
+            mcp_server: Arc::new(Mutex::new(None)),
         }
     }
 }

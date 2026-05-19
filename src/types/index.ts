@@ -72,6 +72,14 @@ export interface ChatMessageRow {
   created_at: string;
 }
 
+export interface McpServerStatus {
+  enabled: boolean;
+  configured_port: number;
+  listening: boolean;
+  bound_port: number | null;
+  url: string | null;
+}
+
 export type Screen = "timeline" | "meeting" | "board";
 
 export interface SearchResultSession {
