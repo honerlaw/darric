@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type {
   ChatMessageRow,
+  McpServerStatus,
   Note,
   SearchResults,
   Session,
@@ -38,8 +39,9 @@ export const saveSetting = async (key: string, value: string): Promise<void> => 
 };
 export const getSetting = async (key: string): Promise<string | null> =>
   invoke<string | null>("get_setting", { key });
-export const listMcpServers = async (): Promise<string[]> =>
-  invoke<string[]>("list_mcp_servers");
+export const listMcpServers = async (): Promise<string[]> => invoke<string[]>("list_mcp_servers");
+export const mcpServerStatus = async (): Promise<McpServerStatus> =>
+  invoke<McpServerStatus>("mcp_server_status");
 
 // Events
 export const onTranscriptChunk = async (

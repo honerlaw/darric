@@ -1,4 +1,5 @@
 pub mod chat;
+pub mod mcp_server;
 pub mod notes;
 pub mod search;
 pub mod sessions;

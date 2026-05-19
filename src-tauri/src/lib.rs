@@ -3,6 +3,7 @@ mod audio;
 mod commands;
 mod db;
 mod error;
+mod mcp_server;
 mod model;
 mod state;
 mod transcription;
@@ -14,7 +15,9 @@ use ai::{
     mcp::{discovery::load_claude_desktop_configs, McpManager},
     AiProvider,
 };
-use commands::{chat, notes, search, sessions, settings, tags, tasks};
+use commands::{
+    chat, mcp_server as mcp_server_cmd, notes, search, sessions, settings, tags, tasks,
+};
 use state::AppState;
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
@@ -41,6 +44,12 @@ pub fn run() {
             };
             let harness = provider.map(|p| AgentHarness::new(p, mcp.clone()));
             let history = db::load_chat_history(&conn);
+
+            let mcp_server_enabled =
+                db::get_setting(&conn, "mcp_server.enabled").as_deref() != Some("false");
+            let mcp_server_port = db::get_setting(&conn, "mcp_server.port")
+                .and_then(|v| v.parse::<u16>().ok())
+                .unwrap_or(27842);
 
             let state = AppState::new(conn, harness, history, mcp);
 
@@ -69,6 +78,21 @@ pub fn run() {
                     Err(e) => log::error!("[startup] model download failed: {e}"),
                 }
             });
+
+            let mcp_server_slot = state.mcp_server.clone();
+            let mcp_server_db = state.db.clone();
+            if mcp_server_enabled {
+                tauri::async_runtime::spawn(async move {
+                    match mcp_server::spawn(mcp_server_db, mcp_server_port).await {
+                        Ok(srv) => {
+                            *mcp_server_slot.lock().unwrap() = Some(srv);
+                        }
+                        Err(e) => log::error!("[mcp_server] startup failed: {e}"),
+                    }
+                });
+            } else {
+                log::info!("[mcp_server] disabled via settings");
+            }
 
             app.manage(state);
             Ok(())
@@ -105,6 +129,7 @@ pub fn run() {
             tags::remove_tag_from_note,
             tags::add_tag_to_task,
             tags::remove_tag_from_task,
+            mcp_server_cmd::mcp_server_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
