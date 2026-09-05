@@ -40,8 +40,6 @@ futures-util = "0.3"
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 
-# Speaker fingerprinting
-rustfft = "6"
 
 # Utilities
 uuid = { version = "1", features = ["v4", "serde"] }
