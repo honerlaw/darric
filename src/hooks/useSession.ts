@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   deleteSession,
   listSessions,
@@ -25,7 +18,6 @@ import type { Session } from "../types";
 interface UseSessionReturn {
   sessions: Session[];
   activeSessionId: string | null;
-  setActiveSessionId: Dispatch<SetStateAction<string | null>>;
   isRecording: boolean;
   isStarting: boolean;
   /**
@@ -204,7 +196,11 @@ export function useSession(): UseSessionReturn {
         setError(String(e));
       } finally {
         setIsStarting(false);
-        setStartingSessionId(null);
+        // Only clear the id this call set. `canResume` stays true for the whole
+        // resume, so a second one can start while this is in flight — clearing
+        // unconditionally would drop the later resume's "Starting…" while it is
+        // still starting.
+        setStartingSessionId((current) => (current === id ? null : current));
       }
     },
     [refresh],
@@ -230,7 +226,6 @@ export function useSession(): UseSessionReturn {
   return {
     sessions,
     activeSessionId,
-    setActiveSessionId,
     isRecording,
     isStarting,
     startingSessionId,

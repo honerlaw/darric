@@ -112,3 +112,49 @@ describe("useTranscript session scoping", () => {
     expect(result.current[0]?.session_id).toBe("A");
   });
 });
+
+describe("useTranscript initial fetch scoping", () => {
+  it("drops a slow fetch whose session is no longer displayed", async () => {
+    // The query path in, matching the event path's attribution. Without the
+    // guard, a fetch issued for the previously-selected session resolves after
+    // the switch and overwrites the pane that replaced it.
+    let releaseA = (): void => undefined;
+    const slowA = new Promise<void>((resolve) => {
+      releaseA = (): void => {
+        resolve();
+      };
+    });
+    mockCommands({
+      get_session_transcript: async (payload?: InvokeArgs) => {
+        const id = (payload as { sessionId: string } | undefined)?.sessionId;
+        if (id === "A") {
+          await slowA;
+          return [
+            {
+              id: "a-line",
+              session_id: "A",
+              device_id: "d1",
+              device_name: "MacBook Microphone",
+              direction: "input",
+              content: "belongs to A",
+              recorded_at: "2024-01-01T09:00:05Z",
+            },
+          ];
+        }
+        return [];
+      },
+    });
+    const { result, rerender } = renderHook(({ id }: { id: string }) => useTranscript(id, false), {
+      initialProps: { id: "A" },
+    });
+
+    // Switch to B before A's fetch resolves, then let A's response land.
+    rerender({ id: "B" });
+    await act(async () => {
+      releaseA();
+      await slowA;
+    });
+
+    expect(result.current).toHaveLength(0);
+  });
+});

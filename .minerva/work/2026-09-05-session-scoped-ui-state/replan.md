@@ -45,3 +45,49 @@ drop-warning attribution intact, and needs no change to `useSession.stop()` at a
 criterion changes — criterion 1 ("after a recording stops, no row shows the live dot") and
 criterion 6 ("#24's behaviour unchanged") are both now satisfiable, which they were not together
 under the original plan.
+
+---
+
+# Replan — 2026-09-05 (second entry, review-driven)
+
+## Original plan
+
+Three fixes for #21, #22 and #23, each scoped to the one code path named in its issue.
+
+## What changed
+
+Review found that two of the three were **half-fixes** — the same defect reachable through a
+second path the issue had not named:
+
+- **#23 fixed the event path and left the query path.** `useTranscript`'s initial
+  `getSessionTranscript(sessionId).then(setLines)` has no stale-response guard, so a slow fetch
+  for the previously-selected session overwrites the pane that replaced it. Verified: select
+  "Retro" while its fetch is pending, click "Standup", release the fetch — Standup's pane shows
+  Retro's line. Identical user-visible outcome to #23, reached by query rather than by event.
+- **#21's `activeSessionId` attribution had a hole.** `droppedSegments` is attributed by
+  `activeSessionId` and never reset, so starting a _second_ recording immediately shows the
+  first one's "transcription fell behind" warning on the new pane until the next poll.
+
+Also: the #21 fix as written used `isRecording`, which the previous unit deliberately keeps true
+across the whole stop — so the sidebar dot kept pulsing "recording now" for the entire stopping
+window, the one place every other consumer already checks `isStopping`.
+
+## New plan
+
+Scope grows by two paths and one predicate, all inside the unit's stated goal — _state that
+belongs to one session must be attributed to it at the point of display_:
+
+- `useTranscript`'s initial fetch compares the resolved `sessionId` against `sessionRef.current`
+  before `setLines`, the same attribution the chunk filter applies.
+- `App` resets `droppedSegments` when `activeSessionId` changes. Keyed on the session rather than
+  on the start, so **resuming the same recording keeps its warning** — those segments really were
+  dropped from that transcript.
+- The sidebar dot is gated `isRecording && !isStopping`, matching `RecorderPane.statusLine`,
+  `emptyTranscriptMessage` and the header's own dot.
+
+## Success criteria — added
+
+9. A slow transcript fetch for a deselected session does not land in the pane that replaced it.
+10. A dropped-segment warning does not carry into a _different_ recording, and does survive a
+    resume of the same one.
+11. The sidebar dot is dark for the stopping window, not just after it.

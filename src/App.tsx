@@ -59,6 +59,14 @@ export default function App(): React.JSX.Element {
     if (isRecording && activeSessionId !== null) setViewingSessionId(activeSessionId);
   }, [isRecording, activeSessionId]);
 
+  // The count is attributed by `activeSessionId` and deliberately outlives its
+  // recording, so it has to be dropped when a different one becomes active —
+  // otherwise the previous recording's warning shows on the new one's pane until
+  // the first poll overwrites it.
+  useEffect(() => {
+    setDroppedSegments(0);
+  }, [activeSessionId]);
+
   // Stops at the click, not at the end of the stop. `capture_drop_count` reads
   // the engine, and `stop_session` takes it synchronously on entry — so every
   // poll during the stopping window returns 0 and would erase a "transcription
@@ -127,7 +135,7 @@ export default function App(): React.JSX.Element {
         <RecordingList
           sessions={sessions}
           selectedId={viewingSessionId}
-          activeId={isRecording ? activeSessionId : null}
+          activeId={isRecording && !isStopping ? activeSessionId : null}
           onSelect={setViewingSessionId}
           onDelete={handleDelete}
         />
