@@ -1,7 +1,7 @@
 # Proposal: reconcile-pr-auto-merge
 
 **Date**: 2026-09-05
-**Status**: Draft
+**Status**: Shipped (2026-09-05)
 
 ## Goal
 
@@ -38,57 +38,69 @@ unlinted PR in the repo. Adding the gate the PR should have had makes the merge 
 
 ## Approach
 
-**Lint the reconciled corpus inside the job, then merge, in
-`.github/workflows/knowledge-reconcile.yml`.** One file, one job, no new workflow and no new
-permissions — `contents: write` and `pull-requests: write` are already granted.
+*Rewritten at promote to match what shipped. The original design — lint the whole corpus, then
+`gh pr merge --auto` with a direct fallback — was replaced after review; `replan.md` records why.*
 
-1. **Gate.** After `gh pr create`, run
-   `python .minerva-tools/plugins/minerva/scripts/knowledge_lint.py .minerva/knowledge` against
-   the branch's corpus. This is the same invocation `check.yml`'s `Knowledge Wiki` job makes,
-   run here because GitHub will not run it there. The linter exits non-zero on errors only
-   (duplicate ids, index drift, broken `[[…]]` wikilinks) and exits 0 on warnings
-   (uncatalogued entry, missing reciprocal) — which are precisely the conditions
-   `knowledge_fix.py` just repaired, so a clean run is the expected outcome.
+**`.github/workflows/knowledge-reconcile.yml` lints its own PR and merges it.** One workflow, one
+added step, plus one line in `.gitignore`. No new permissions: `contents: write` and
+`pull-requests: write` were already granted.
 
-2. **Merge.** `gh pr merge --auto --squash "$BRANCH"`, falling back to a direct
-   `gh pr merge --squash "$BRANCH"` when GitHub refuses to enable auto-merge. The fallback is
-   not belt-and-braces: with no required status checks and no required reviews there is
-   nothing for auto-merge to wait on, and GitHub rejects
-   `enablePullRequestAutoMerge` on a pull request that is already in a clean state. Trying
-   `--auto` first is still the right order — it is the branch-protection-respecting form, so if
-   required checks are ever added to `main` the workflow starts honouring them with no further
-   edit.
+The job is a five-stage pipeline, and each stage is scoped to what it can actually know.
 
-3. **Failure is loud and leaves the PR.** If the linter errors, the step emits a `::error::`
-   annotation and exits non-zero *after* the PR exists. The reconciliation work is preserved
-   for a human to inspect and merge or fix; the red job is the notification. This is the one
-   path that still ends with a PR awaiting a human, and it should.
+1. **Baseline** (new `Baseline knowledge lint` step, before `Apply mechanical fixes`). Lint
+   `main`'s corpus and keep the sorted error lines in `${RUNNER_TEMP}/errors-baseline.txt`.
+   Pre-existing errors are surfaced as a `::warning::` and never block. The step clears `errexit`
+   explicitly — the runner's default shell sets it, and `set -uo pipefail` does not clear it — so
+   nothing here can fail the run. A crash leaves an empty baseline, which can only make the gate
+   below stricter, never looser.
 
-**Constraint carried through unchanged**: the workflow must keep containing the literal string
-`knowledge_fix.py`, because `minerva:cleanup`'s stand-down grep is what stops cleanup and CI
-from both opening index-rewriting PRs and racing on `index.md`. The change adds a second
-occurrence (`knowledge_lint.py`) and removes none.
+2. **Gate on new errors only.** After the PR is opened, a `new_lint_errors()` helper lints again
+   and emits `comm -13 baseline stage`. The job fails only on error lines *this* reconciliation
+   introduced. A linter exit status above 1 is treated as a crash rather than a lint failure, and
+   fails on its own. Gating on absolute cleanliness instead would let one inherited defect the
+   fixer structurally refuses to repair — a broken `[[…]]` link, a duplicate id — block every
+   future reconciliation forever
+   ([[2026-09-05-pattern-an-automated-gate-must-be-scoped-to-what-its-pipeline-changed]]).
 
-### Rejected alternatives
+3. **Merge directly.** `gh pr merge --squash "$PR_URL"` — deliberately not `--auto`. On a PR that
+   can carry no checks, `--auto` succeeding is the bad outcome: it accepts a blocked PR, exits 0,
+   and parks reconciliation forever behind a check that can never report, with the job green. A
+   direct merge that branch protection rejects fails loudly instead
+   ([[2026-09-05-pattern-auto-merge-on-a-pr-that-can-carry-no-checks]]). `$PR_URL` rather than
+   `$BRANCH` also drops gh's head-ref-to-PR lookup.
 
-- **`gh pr merge --auto --squash` alone** — the literal reading of the request, and what
-  `minerva:cleanup` does. Rejected on the measured evidence above: with nothing blocking these
-  PRs, `--auto` is likely to be refused outright, leaving the user still merging by hand while
-  the workflow reports success. It also ships an ungated auto-merge on the repo's only unlinted
-  PR.
-- **Commit the reconciliation straight to `main`, no PR** — rejected. `main` carries
-  `required_pull_request_reviews`, so a direct push is blocked; and minerva's reconciliation
-  contract is explicit that reconciliation always goes through its own PR.
+4. **Verify what actually landed.** Read the squash commit's oid from the merged PR, fetch that
+   oid, check it out, and lint it against the same baseline. Not `main`'s tip: the tip may be a
+   later unrelated merge, which would blame this run for someone else's defect, or — from a
+   lagging read — the pre-merge commit the baseline was taken on, which passes trivially and
+   verifies nothing. This restores the post-merge signal that automating the merge removed, since
+   a `GITHUB_TOKEN` merge fires no `push` event
+   ([[2026-09-05-reference-github-token-actions-trigger-no-workflows]]). It reports drift; it does
+   not prevent it.
+
+5. **Branch ref unique per attempt.** `minerva/reconcile-ci/${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}`.
+   `GITHUB_RUN_ID` alone is stable across "Re-run failed jobs", and stage 4 makes a red job after a
+   successful merge possible — so a re-run would otherwise reuse the failed attempt's branch and
+   die at `gh pr create` with "No commits between main and …".
+
+`.gitignore` gains `.minerva-tools/`: it is where CI checks out the pinned minerva tooling, and if
+it were ever committed, stage 4's checkout would abort with "untracked working tree files would be
+overwritten" — after the merge had already landed.
+
+**Constraint carried through unchanged**: the workflow still contains the literal
+`knowledge_fix.py`, because `minerva:cleanup`'s stand-down grep is what stops cleanup and CI from
+both opening index-rewriting PRs and racing on `index.md`. The change adds a second occurrence
+(`knowledge_lint.py`) and removes none.
 
 ### A deliberate divergence, named
 
-`minerva:cleanup`'s `references/reconciliation.md` says that if `gh pr merge --auto` is
-rejected, the run must "report the PR URL and stop rather than merging another way". That rule
-binds `minerva:cleanup`, which does not run here, and its stated rationale is that "a human
-merging it at their convenience is a correct outcome". The repo owner has merged 6/6 of these
-by hand today and is asking for them to stop needing that. The direct-merge fallback is that
-choice, applied to a PR type whose content is regenerated by a pinned script rather than
-authored — and it is gated by a linter run the rule's author assumed CI was already applying.
+`minerva:cleanup`'s `references/reconciliation.md` says that if `gh pr merge --auto` is rejected,
+the run must "report the PR URL and stop rather than merging another way". That rule binds
+`minerva:cleanup`, which stands down in this repo, and its stated rationale is that "a human
+merging it at their convenience is a correct outcome". The repo owner merged 6/6 of these by hand
+on 2026-09-05 and asked for them to stop needing that. The direct merge is that choice, applied to
+a PR type whose content is regenerated by a pinned script rather than authored — and gated by a
+linter run the rule's author assumed CI was already applying.
 
 ## Success criteria
 
