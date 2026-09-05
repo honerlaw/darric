@@ -15,24 +15,24 @@ start honouring required checks by itself if any were ever added to `main`.
 Review found that each of the three scopes is wrong, and the `--auto` rationale is backwards.
 
 1. **`--auto` returning 0 means "auto-merge enabled", not "merged" — and here those diverge
-   permanently.** Reconciliation PRs carry zero checks *by construction* (GitHub does not run
+   permanently.** Reconciliation PRs carry zero checks _by construction_ (GitHub does not run
    workflows for `GITHUB_TOKEN`-opened PRs). Add a required status check to `main` — exactly the
    change the original comment invited — and the PR sits at "Expected — waiting for status to be
-   reported" forever: `enablePullRequestAutoMerge` is *accepted* (a blocked PR is what it is
+   reported" forever: `enablePullRequestAutoMerge` is _accepted_ (a blocked PR is what it is
    for), `gh` exits 0, the job prints "auto-merge enabled" and goes green, and the fallback never
    runs. Reconciliation stops with no signal while orphan PRs and branches accumulate. Raising
    `required_approving_review_count` above 0 does the same, since a `GITHUB_TOKEN` PR cannot
    self-approve. A required check that can never report is a permanent wedge, not graceful
    honouring — the property `--auto` was chosen for does not exist on this PR type.
 
-2. **Failing on *any* lint error is a regression, not a gate.** `knowledge_fix.py` structurally
+2. **Failing on _any_ lint error is a regression, not a gate.** `knowledge_fix.py` structurally
    refuses to repair broken `[[…]]` links (`knowledge_fix.py:293`) and anything touching a
    duplicate id; both are error-severity in `knowledge_lint.py` (`broken-link`, `id`). `main` has
    no required status checks, so a red `Knowledge Wiki` job can be merged by hand and leave the
    corpus in precisely that state. From then on every knowledge push opens a PR and fails the
    gate on an unrelated pre-existing defect — the index stops updating and dead PRs pile up,
    where before this change the PR merged by hand and the index stayed current. The gate must
-   fail on errors *this reconciliation introduced*, not on errors it inherited.
+   fail on errors _this reconciliation introduced_, not on errors it inherited.
 
 3. **Merging with `GITHUB_TOKEN` suppresses `check.yml`'s `push: branches:[main]` run.** That
    run is what validated the merged tree when a human clicked Merge. The in-job lint sees the

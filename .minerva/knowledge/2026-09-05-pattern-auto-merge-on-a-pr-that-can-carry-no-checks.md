@@ -1,4 +1,4 @@
-# On a PR that can carry no checks, `--auto` being *accepted* is the failure mode
+# On a PR that can carry no checks, `--auto` being _accepted_ is the failure mode
 
 **Date**: 2026-09-05
 **Type**: pattern
@@ -18,7 +18,7 @@ That reasoning is backwards for this PR type, and the review caught it before it
 ## Finding
 
 `--auto` is designed to accept a **blocked** PR — that is its whole purpose — and it returns 0 on
-having *enabled* auto-merge, not on having merged. The two diverge permanently when the PR's
+having _enabled_ auto-merge, not on having merged. The two diverge permanently when the PR's
 checks can never arrive, which is exactly the case for a PR opened with `GITHUB_TOKEN`
 ([[2026-09-05-reference-github-token-actions-trigger-no-workflows]]).
 
@@ -36,7 +36,7 @@ version announces itself and the other reports success while reconciliation sile
 
 - Prefer `--auto` when a PR's checks will genuinely report and you want to wait for them. Prefer a
   direct merge when the PR structurally cannot produce the checks it would be waiting on.
-- Treat "the more conservative-looking flag" as a claim to test, not a default. `--auto` *looks*
+- Treat "the more conservative-looking flag" as a claim to test, not a default. `--auto` _looks_
   like the safe choice because it defers to branch protection; the deference is what makes it
   fail silently here.
 - More generally: a command whose success means "a future action is scheduled" is not

@@ -20,20 +20,20 @@
 
 ## Notes
 
-- End-to-end validation path: this unit's own promote adds `.minerva/knowledge/` entries, so merging its PR pushes to `main` under the workflow's `paths` filter and fires the *new* reconcile job. That run is the first real answer to whether GitHub accepts `gh pr merge --auto` on a check-less PR or refuses it as clean — watch its log in Phase 7 for which branch of the `if` it took.
+- End-to-end validation path: this unit's own promote adds `.minerva/knowledge/` entries, so merging its PR pushes to `main` under the workflow's `paths` filter and fires the _new_ reconcile job. That run is the first real answer to whether GitHub accepts `gh pr merge --auto` on a check-less PR or refuses it as clean — watch its log in Phase 7 for which branch of the `if` it took.
 
 ## Review triage 2026-09-05
 
 Code review (fresh-context subagent; no PR existed yet) returned six findings. All six triaged **FIX** — three of them load-bearing, which triggered the replan recorded in `replan.md`.
 
-| # | Finding | Disposition |
-|---|---|---|
-| 1 | `--auto` returning 0 means "enabled", not "merged"; a required check added to `main` wedges reconciliation forever while the job stays green | FIX — load-bearing → replan |
-| 2 | Gating on *any* lint error lets one pre-existing unfixable defect block every future reconciliation | FIX — load-bearing → replan |
-| 3 | Fallback branch hard-codes a false diagnosis; `--auto`-then-direct has a false-red double-merge window | FIX — subsumed by #1's removal of `--auto` |
-| 4 | Merging with `GITHUB_TOKEN` suppresses `check.yml`'s push-to-main run, so the merged tree is never validated | FIX — load-bearing → replan |
-| 5 | `gh pr merge "$BRANCH"` re-resolves head-ref→PR when `$PR_URL` is already in hand | FIX |
-| 6 | Two factually wrong comments (three warning families not two; the linter *does* run in `check.yml`) | FIX — documentation for behavior this diff touched, never deferred |
+| #   | Finding                                                                                                                                      | Disposition                                                        |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 1   | `--auto` returning 0 means "enabled", not "merged"; a required check added to `main` wedges reconciliation forever while the job stays green | FIX — load-bearing → replan                                        |
+| 2   | Gating on _any_ lint error lets one pre-existing unfixable defect block every future reconciliation                                          | FIX — load-bearing → replan                                        |
+| 3   | Fallback branch hard-codes a false diagnosis; `--auto`-then-direct has a false-red double-merge window                                       | FIX — subsumed by #1's removal of `--auto`                         |
+| 4   | Merging with `GITHUB_TOKEN` suppresses `check.yml`'s push-to-main run, so the merged tree is never validated                                 | FIX — load-bearing → replan                                        |
+| 5   | `gh pr merge "$BRANCH"` re-resolves head-ref→PR when `$PR_URL` is already in hand                                                            | FIX                                                                |
+| 6   | Two factually wrong comments (three warning families not two; the linter _does_ run in `check.yml`)                                          | FIX — documentation for behavior this diff touched, never deferred |
 
 Both F6 claims verified in source before accepting: `reciprocal-manual` is a third warning family (`knowledge_lint.py:432`) that `knowledge_fix.py:293` refuses on every run by design; `check.yml`'s `Knowledge Wiki` job does run the linter on every PR but this one.
 
@@ -45,14 +45,14 @@ Reviewer's aside, noted and correct: the workflow edit was uncommitted at review
 
 The reviewer re-read the rewrite, confirmed all six original fixes (including re-deriving F2's premise from the pinned scripts and running the helper's status propagation under `bash -euo pipefail` for rc 0/1/2), and returned six new findings. All six FIX; none changed the approach, so no second replan — criteria 5, 10 and 11 were sharpened instead.
 
-| # | Finding | Fix |
-|---|---|---|
-| 1 | `FETCH_HEAD` is main's tip, not this run's merge commit — blames a third party's defect on this PR, or verifies a pre-merge tree and reports "verified" (false green on the exact drift the step exists to catch) | Capture `mergeCommit.oid`, `git fetch --depth=1 origin <oid>`, check out the oid. Guarded for an unreadable oid |
-| 2 | `GITHUB_RUN_ID` is stable across "Re-run failed jobs", so a re-run reuses the failed attempt's branch — 422 at `gh pr create`, or a non-fast-forward push | `${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}` |
-| 3 | `set -uo pipefail` does not clear the runner's inherited `errexit`, so the baseline step's "a crash here cannot fail the run" comment was unenforced | Explicit `set +e` — verified under `bash -e -o pipefail` |
-| 4 | `errors-$1.txt` shared a namespace with `errors-before.txt`; a stage label of `before` would compare the baseline against itself and pass **unconditionally** — fail-open, in a helper whose job is to fail closed | `errors-baseline.txt` / `errors-stage-$1.txt` |
-| 5 | Post-merge crash branch never said the merge had already landed, inviting the re-run that trips #2 | Caller-side `::error::` naming merge status; annotations moved out of the helper onto stdout |
-| 6 | `.minerva-tools/` untracked but not ignored — if committed, the post-merge checkout aborts | Added to `.gitignore` |
+| #   | Finding                                                                                                                                                                                                            | Fix                                                                                                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| 1   | `FETCH_HEAD` is main's tip, not this run's merge commit — blames a third party's defect on this PR, or verifies a pre-merge tree and reports "verified" (false green on the exact drift the step exists to catch)  | Capture `mergeCommit.oid`, `git fetch --depth=1 origin <oid>`, check out the oid. Guarded for an unreadable oid |
+| 2   | `GITHUB_RUN_ID` is stable across "Re-run failed jobs", so a re-run reuses the failed attempt's branch — 422 at `gh pr create`, or a non-fast-forward push                                                          | `${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}`                                                                        |
+| 3   | `set -uo pipefail` does not clear the runner's inherited `errexit`, so the baseline step's "a crash here cannot fail the run" comment was unenforced                                                               | Explicit `set +e` — verified under `bash -e -o pipefail`                                                        |
+| 4   | `errors-$1.txt` shared a namespace with `errors-before.txt`; a stage label of `before` would compare the baseline against itself and pass **unconditionally** — fail-open, in a helper whose job is to fail closed | `errors-baseline.txt` / `errors-stage-$1.txt`                                                                   |
+| 5   | Post-merge crash branch never said the merge had already landed, inviting the re-run that trips #2                                                                                                                 | Caller-side `::error::` naming merge status; annotations moved out of the helper onto stdout                    |
+| 6   | `.minerva-tools/` untracked but not ignored — if committed, the post-merge checkout aborts                                                                                                                         | Added to `.gitignore`                                                                                           |
 
 The reviewer's one unsettled item (whether the runner parses `::error::` from stderr) was dissolved rather than researched: the helper now emits plain text to stderr and every `::error::` is raised by a caller on stdout, which also fixed #5.
 
@@ -66,7 +66,7 @@ The reviewer's one unsettled item (whether the runner parses `::error::` from st
 
 **TODO — none filed.** Four candidates were checked against the deferral bar and none has a writable failure scenario:
 
-- *Use a PAT/App token so reconcile PRs get real CI.* The only `check.yml` job relevant to a `.minerva/knowledge/**`-only diff is `Knowledge Wiki`, which this job now runs itself. Recorded as an option in the reference entry rather than deferred as work.
-- *`overview.md` is still not refreshed by CI.* Pre-existing, documented in the workflow header, untouched by this change.
-- *Post-merge drift is reported but not repaired.* Verified it self-heals: `knowledge_fix.py` removes stale catalog lines on the next reconcile run (docstring line 13, `apply` summary line 404).
-- *A pre-existing error the baseline absorbs could go unnoticed.* It cannot go quiet: broken links and duplicate ids are error-severity, and `check.yml`'s `Knowledge Wiki` job runs on every ordinary PR, so the next one goes red until it is fixed.
+- _Use a PAT/App token so reconcile PRs get real CI._ The only `check.yml` job relevant to a `.minerva/knowledge/**`-only diff is `Knowledge Wiki`, which this job now runs itself. Recorded as an option in the reference entry rather than deferred as work.
+- _`overview.md` is still not refreshed by CI._ Pre-existing, documented in the workflow header, untouched by this change.
+- _Post-merge drift is reported but not repaired._ Verified it self-heals: `knowledge_fix.py` removes stale catalog lines on the next reconcile run (docstring line 13, `apply` summary line 404).
+- _A pre-existing error the baseline absorbs could go unnoticed._ It cannot go quiet: broken links and duplicate ids are error-severity, and `check.yml`'s `Knowledge Wiki` job runs on every ordinary PR, so the next one goes red until it is fixed.
