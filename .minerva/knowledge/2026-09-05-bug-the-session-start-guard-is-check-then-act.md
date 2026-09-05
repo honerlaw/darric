@@ -57,3 +57,4 @@ so the guard and the install are inside one critical section and the second call
 - [[2026-09-05-decision-capture-engine-requires-a-transcriber]] — the change that widened this window
 - [[2026-09-05-bug-a-losing-rename-became-a-silent-none-transcriber]] — the unit that surfaced it
 - [[2026-09-05-bug-arc-try-unwrap-after-sharing-fails-silently]] — the earlier thread-leak-on-teardown in the same engine
+- [[2026-09-05-reference-stop-session-releases-the-engine-before-teardown]] — see also

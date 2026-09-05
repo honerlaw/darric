@@ -47,3 +47,4 @@ defect is in the shape of the question.
 - [[2026-09-05-bug-a-losing-rename-became-a-silent-none-transcriber]] — see also
 - [[2026-09-05-decision-capture-engine-requires-a-transcriber]] — see also
 - [[2026-09-05-pattern-an-early-return-can-make-a-feature-unreachable]] — see also
+- [[2026-09-05-pattern-state-changed-only-in-finally-reads-as-a-dead-click]] — see also

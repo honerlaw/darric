@@ -22,6 +22,7 @@
 ## Patterns
 
 - [[2026-09-05-pattern-an-early-return-can-make-a-feature-unreachable]] — the model-download indicator was complete and correct but rendered below a `session === null` early return, so it could not run in the only state it existed for
+- [[2026-09-05-pattern-state-changed-only-in-finally-reads-as-a-dead-click]] — `stop()` awaited a multi-second Tauri command and mutated every piece of UI state in its `finally`, so for the whole call the app rendered exactly as it had while recording — and the button stayed live, so a second press hit a non-idempotent command
 - [[2026-09-05-pattern-ui-rewrites-drop-state-guards-not-markup]] — rewriting a screen from its rendered shape carries the visible markup across but loses per-selection state resets and cross-entity guards — the parts with no visual counterpart
 - [[2026-09-05-pattern-verifying-a-sequence-says-nothing-about-whether-it-runs]] — a completion check confirmed the flush/shutdown ordering inside `stop()` was correct, and it was — but the `if let Some(pool)` guard above it was never true, so none of the verified steps executed
 
@@ -39,4 +40,5 @@
 - [[2026-09-05-reference-knowledge-wiki-is-ci-gated]] — `check.yml`'s `Knowledge Wiki` job runs `knowledge_lint.py` on every pull request and every push to main — index drift and broken wikilinks are errors, uncatalogued entries and missing reciprocals are warnings
 - [[2026-09-05-reference-matchmedia-stub-pins-tests-to-light-mode]] — `src/test/setup.ts` installs a never-restored `matchMedia` returning `matches: false` with a no-op change listener, so `App`'s dark branch and its listener lifecycle go unexercised
 - [[2026-09-05-reference-model-rs-download-paths-have-no-tests]] — `MODEL_URL` is a hard-coded `const`, so no Rust test can reach the status, mid-stream, rename, cleanup or serialisation paths; `model.rs` is the one module of seven with no test block
+- [[2026-09-05-reference-stop-session-releases-the-engine-before-teardown]] — `stop_session` `take()`s the engine out of `AppState` synchronously on entry and only then spawns the blocking teardown, so for the seconds that follow every engine-derived command reports "no recording" while capture threads, segmenters and whisper workers are still running
 - [[2026-09-05-reference-whisper-inference-serialises-on-one-metal-gpu]] — measured 1.14x speedup from 4x the threads against one shared `WhisperContext`, so pool size buys almost nothing and the queue's overflow policy is what protects a recording
