@@ -1,7 +1,7 @@
 # Proposal: model-download-progress
 
 **Date**: 2026-09-05
-**Status**: Draft
+**Status**: Shipped (2026-09-05)
 
 ## Goal
 
@@ -27,8 +27,10 @@ Record before it finishes reaches `load_transcriber`, finds no cached transcribe
 `ensure_model` again — which blocks on the full download. `Header.tsx` labels that "Starting…"
 and disables the button, so the user gets a disabled control, a static empty pane, and no
 indication that anything is happening. (That second `ensure_model` call is also a genuine
-duplicate-download race against the startup one — both stream into the same `.tmp` path. This
-proposal closes the only UI path that reaches it and files the underlying race separately.)
+duplicate-download race against the startup one — both stream into the same `.tmp` path. The
+original plan deferred it; review showed the UI guard could not close it, so it is fixed at its
+source here. See `replan.md` and
+[[2026-09-05-bug-concurrent-model-downloads-share-one-tmp-file]].)
 
 There is also no error event. `ensure_model` failures are logged and swallowed, so a failed
 download would leave the new indicator pinned at its last percentage and the Record button
@@ -36,37 +38,49 @@ disabled forever. Surfacing the download honestly requires surfacing its failure
 
 ## Approach
 
-**Lift the download indicator to app scope and make the Record button say what it is doing.**
+**The download is surfaced at app scope, and its state is queryable rather than only
+broadcast.** The second half was not in the original plan; see `replan.md`.
 
-1. **Emit `model_download_error`.** `model.rs::ensure_model` gains an emit on its failure
-   paths, carrying the error string; both call sites (`lib.rs` startup, `sessions.rs`
-   `load_transcriber`) keep their existing logging. Bind it in `lib/tauri.ts` alongside the
-   three sibling events.
+1. **`ModelDownloadBanner`** (new) renders from `App`, directly under the header, whenever a
+   download is in flight — outside `RecorderPane` and so independent of whether a recording is
+   selected. It carries a real `progressbar` role and clamps the percentage it is given. The
+   old block inside `RecorderPane`, which sat below that component's `session === null` early
+   return and could therefore never render on a fresh install, is gone along with its prop.
 
-2. **Own the state in `useSession`.** `model_download_error` clears `downloadProgress` back to
-   `null` and sets `error`, so a failed download releases the UI instead of stranding it.
+2. **Download state is queryable.** `model.rs` keeps the live percentage in a process-wide
+   atomic, updated on every chunk, and a `model_download_state` command returns it.
+   `useSession` seeds `downloadProgress` from that query on mount, preferring any value a live
+   event already supplied. This is what makes the indicator correct on a first launch: the
+   startup download begins in Tauri's `setup()`, and events emitted there reach no webview at
+   all. The emit step also dropped from 5% to 1%, so the bar moves rather than appearing to
+   stall for ~80 MB at a time.
 
-3. **Render the indicator in `App.tsx`**, directly beneath `Header`, whenever
-   `downloadProgress !== null` — outside `RecorderPane` and therefore independent of whether a
-   recording is selected. Remove the block from `RecorderPane` and drop its now-unused
-   `downloadProgress` prop.
+3. **`ensure_model` is serialised.** A process-wide `tokio::sync::Mutex`, with an `exists()`
+   re-check after acquiring it, so the startup pre-load and a `start_session` that overlaps it
+   produce one download rather than two interleaved writes into a shared `.tmp`. The original
+   plan deferred this race to a tracker issue on the strength of the UI guard below; that
+   reasoning did not survive review.
 
-4. **Make the button honest.** `Header` takes `downloadProgress`; while a download is in
-   flight the label reads `Downloading 42%` rather than `Starting…`, and the button is disabled
-   for the download as well as for `isStarting`. `RecorderPane`'s "Resume recording" button is
-   gated the same way via `canResume`, closing the second path into `load_transcriber`.
+4. **Failures are terminal and visible.** A new `model_download_error` event carries the
+   message; `ensure_model` removes the partial `.tmp` before emitting it. `useSession` clears
+   the progress and puts the reason in the existing error bar, and clears that stale message
+   again when a later start or resume begins.
 
-Two alternatives were rejected:
+5. **The buttons say what they are doing.** `Header`'s label reads `Downloading <n>%` while a
+   download runs, taking precedence over `Starting…`, and the gate applies only to _starting_ a
+   recording — the same button serves as Stop, and disabling it mid-recording would strand the
+   user. `RecorderPane`'s Resume is withheld through `canResume` for the same reason.
 
-- **Duplicate the progress block into `RecorderPane`'s `session === null` branch.** The
-  smallest possible diff, and wrong: it leaves app-global state owned by a session-scoped
-  component, so the indicator still vanishes the moment the user selects a recording
-  mid-download, and the Record button still says "Starting…". It treats the symptom's location
-  rather than the state's ownership.
-- **A blocking modal overlay for the duration of the download.** Rejected because the download
-  is a background startup task and browsing, renaming and deleting existing recordings are all
-  legitimate during it. It also makes the failure mode strictly worse: a failed download traps
-  the user behind an overlay rather than merely disabling one button.
+Two alternatives were rejected at design time:
+
+- **Duplicate the progress block into `RecorderPane`'s `session === null` branch.** The smallest
+  possible diff, and wrong: it leaves app-global state owned by a session-scoped component, so
+  the indicator still vanishes the moment a recording is selected mid-download, and the Record
+  button still says "Starting…".
+- **A blocking modal overlay for the duration of the download.** The download is a background
+  startup task and browsing, renaming and deleting existing recordings are legitimate during it.
+  It also makes the failure mode strictly worse: a failed download would trap the user behind an
+  overlay rather than merely disabling one button.
 
 ## Success criteria
 
