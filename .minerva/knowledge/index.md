@@ -6,14 +6,23 @@
 - [[2026-05-19-decision-rmcp-as-mcp-sdk]] — depend on rmcp 1.7 (the official Rust MCP SDK) for protocol framing and streamable HTTP; the 1.4 floor is a DNS-rebinding CVE fix
 - [[2026-05-19-decision-spawn-blocking-for-rusqlite-tools]] — every MCP tool handler dispatches its rusqlite query through `tokio::task::spawn_blocking` — don't strip it, it prevents runtime stalls and satisfies `unused_async`
 - [[2026-05-19-decision-tool-handler-router-pattern]] — use `#[tool_handler(router = self.tool_router)]`, never the bare form — the bare form leaves the field dead and needs an `#[allow]` this repo forbids
+- [[2026-09-05-decision-strip-darric-to-a-recorder]] — darric is now only a recorder — the AI chat, MCP client, MCP server, notes, tasks, tags, search and board features were deleted outright, retiring the four MCP decisions with them
 
 ## Bugs
 
+- [[2026-09-05-bug-prettierignore-misses-generated-tauri-schemas]] — `.prettierignore` did not exclude the git-ignored `src-tauri/gen/` Tauri schemas, so `npm run format` failed locally for anyone who had run a build — while CI stayed green because it formats before those files exist
+
 ## Patterns
 
+- [[2026-09-05-pattern-ui-rewrites-drop-state-guards-not-markup]] — rewriting a screen from its rendered shape carries the visible markup across but loses per-selection state resets and cross-entity guards — the parts with no visual counterpart
+
 ## Constraints
+
+- [[2026-09-05-constraint-phases-must-use-the-canonical-list-form]] — `read_phases` stops at the next `#` line, so writing phases as `### 1. Name` subsections parses as zero phases — the unit ships as unphased and its later phases are stranded with no error
 
 ## References
 
 - [[2026-09-05-reference-claude-md-symlinks-to-agents-md]] — CLAUDE.md is a symlink, not a copy — a tool that replaces rather than follows it silently forks the two agent files
+- [[2026-09-05-reference-clippy-ceiling-configured-not-enforced]] — `AGENTS.md` calls `all=deny` + pedantic + nursery + cargo "the ceiling", but only `all` and `correctness` are deny — pedantic and nursery are warn, and no lint command passes `-D warnings`, so those violations stay green
 - [[2026-09-05-reference-knowledge-corpus-not-ci-gated]] — `check.yml` runs TypeScript/Rust builds and tests only — nothing runs `knowledge_lint.py`, so index drift and broken `[[…]]` wikilinks reach `main` green
+- [[2026-09-05-reference-knowledge-wiki-is-ci-gated]] — `check.yml`'s `Knowledge Wiki` job runs `knowledge_lint.py` on every pull request and every push to main — index drift and broken wikilinks are errors, uncatalogued entries and missing reciprocals are warnings

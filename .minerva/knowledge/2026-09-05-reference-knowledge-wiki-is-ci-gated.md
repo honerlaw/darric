@@ -44,3 +44,4 @@ reconciles later.
 ## Related
 
 - [[2026-09-05-reference-knowledge-corpus-not-ci-gated]] — the state this replaced, when nothing ran the linter
+- [[2026-09-05-reference-clippy-ceiling-configured-not-enforced]] — see also

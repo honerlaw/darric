@@ -43,3 +43,5 @@ commands to 9. Migration 009 drops the `notes`, `tasks`, `tags`, `session_tags`,
 - [[2026-05-19-decision-spawn-blocking-for-rusqlite-tools]] — retired with the MCP server this removes
 - [[2026-05-19-decision-tool-handler-router-pattern]] — retired with the MCP server this removes
 - [[2026-05-19-decision-inline-tests-for-mcp-queries]] — survives the removal; its predicted cost came due during it
+- [[2026-09-05-constraint-phases-must-use-the-canonical-list-form]] — see also
+- [[2026-09-05-pattern-ui-rewrites-drop-state-guards-not-markup]] — see also
