@@ -1,7 +1,7 @@
 # Use `#[tool_handler(router = self.tool_router)]`, not bare `#[tool_handler]`
 
 **Date**: 2026-05-18
-**Context**: .minerva/work/001-mcp-server
+**Context**: .minerva/work/2026-05-19-mcp-server
 
 ## Context
 

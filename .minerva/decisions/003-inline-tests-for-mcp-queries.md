@@ -1,7 +1,7 @@
 # Test MCP query functions inline (`#[cfg(test)] mod tests`), not via `tests/`
 
 **Date**: 2026-05-18
-**Context**: .minerva/work/001-mcp-server
+**Context**: .minerva/work/2026-05-19-mcp-server
 
 ## Context
 

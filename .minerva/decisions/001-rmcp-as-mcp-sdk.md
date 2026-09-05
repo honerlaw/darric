@@ -1,7 +1,7 @@
 # Use rmcp (official Rust MCP SDK), pinned at 1.7
 
 **Date**: 2026-05-18
-**Context**: .minerva/work/001-mcp-server
+**Context**: .minerva/work/2026-05-19-mcp-server
 
 ## Context
 
