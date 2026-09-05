@@ -1,6 +1,6 @@
 use crate::audio::device::ExclusionRegistry;
 use crate::audio::CaptureEngine;
-use crate::transcription::Transcriber;
+use crate::transcription::loader::TranscriberSlot;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
@@ -10,7 +10,16 @@ pub struct AppState {
     pub db: Arc<DbConn>,
     /// The running capture session, if any.
     pub engine: Mutex<Option<CaptureEngine>>,
-    pub transcriber: Arc<Mutex<Option<Arc<Transcriber>>>>,
+    pub transcriber: TranscriberSlot,
+    /// Serialises `start_session` / `resume_session`.
+    ///
+    /// The `engine.is_some()` guard alone is a check-then-act: the engine is not
+    /// installed until capture has actually started, and starting now awaits the
+    /// model load, so two commands could both pass the guard, both build an
+    /// engine, and have the second overwrite the first. `CaptureEngine` has no
+    /// `Drop`, so the overwritten one's capture threads and whisper workers
+    /// would run — and keep writing transcript lines — until the app quit.
+    pub session_transition: tokio::sync::Mutex<()>,
     /// Aggregate devices this process created for output taps, which must never
     /// be enumerated back as inputs.
     pub exclusions: ExclusionRegistry,
@@ -26,7 +35,8 @@ impl AppState {
         Self {
             db: Arc::new(DbConn(Mutex::new(conn))),
             engine: Mutex::new(None),
-            transcriber: Arc::new(Mutex::new(None)),
+            transcriber: Arc::new(tokio::sync::Mutex::new(None)),
+            session_transition: tokio::sync::Mutex::new(()),
             exclusions: ExclusionRegistry::new(),
             disabled_devices: Mutex::new(disabled_devices),
         }

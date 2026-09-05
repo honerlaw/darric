@@ -40,7 +40,7 @@ pub struct CaptureEngine {
     threads: Vec<JoinHandle<()>>,
     statuses: Vec<SharedStatus>,
     segmenters: Vec<(CaptureDevice, Arc<Mutex<Segmenter>>)>,
-    pool: Option<Arc<TranscriptionPool>>,
+    pool: Arc<TranscriptionPool>,
     /// Live output taps. Dropping these stops and destroys the underlying Core
     /// Audio objects, so they are held for the session's lifetime.
     taps: Vec<OutputTap>,
@@ -50,13 +50,15 @@ pub struct CaptureEngine {
 impl CaptureEngine {
     /// Start capturing every device in `devices`.
     ///
-    /// With no transcriber the audio is still captured and metered — the UI
-    /// stays honest about which devices are live while the model loads — but
-    /// nothing is transcribed.
+    /// A transcriber is required, not optional. It used to be an `Option`, and a
+    /// caller that silently passed `None` produced a session that captured and
+    /// metered audio while transcribing none of it — the bug this signature now
+    /// makes unexpressible. Callers that cannot obtain a transcriber must fail
+    /// rather than start a recording that cannot produce anything.
     pub fn start(
         session_id: String,
         devices: Vec<CaptureDevice>,
-        transcriber: Option<Arc<Transcriber>>,
+        transcriber: &Arc<Transcriber>,
         worker_count: usize,
         app: &AppHandle,
         db: &Arc<DbConn>,
@@ -64,7 +66,7 @@ impl CaptureEngine {
     ) -> Result<Self> {
         let shutdown = Arc::new(AtomicBool::new(false));
 
-        let pool = transcriber.map(|t| {
+        let pool = {
             let sink_db = Arc::clone(db);
             let sink_app = app.clone();
             let sink_session = session_id.clone();
@@ -73,16 +75,12 @@ impl CaptureEngine {
                     persist_and_emit(&sink_db, &sink_app, &sink_session, &line);
                 });
             Arc::new(TranscriptionPool::new(
-                &t,
+                transcriber,
                 worker_count,
                 QUEUE_CAPACITY_PER_SOURCE * devices.len().max(1),
                 &sink,
             ))
-        });
-        if pool.is_none() {
-            log::warn!("[audio] no transcriber — capturing without transcription");
-        }
-        let pool: Option<Arc<TranscriptionPool>> = pool;
+        };
 
         let mut threads = Vec::new();
         let mut statuses = Vec::new();
@@ -102,7 +100,7 @@ impl CaptureEngine {
             statuses.push(Arc::clone(&status));
             segmenters.push((dev.clone(), Arc::clone(&seg)));
 
-            let pool_for_tap = pool.clone();
+            let pool_for_tap = Arc::clone(&pool);
             let dev_for_cb = dev.clone();
             let status_for_cb = Arc::clone(&status);
             let sink = move |samples: &[f32]| {
@@ -116,9 +114,7 @@ impl CaptureEngine {
                     sg.push(samples)
                 };
                 for segment in ready {
-                    if let Some(p) = pool_for_tap.as_ref() {
-                        p.submit(job(&dev_for_cb, segment));
-                    }
+                    pool_for_tap.submit(job(&dev_for_cb, segment));
                 }
             };
 
@@ -152,7 +148,7 @@ impl CaptureEngine {
             statuses.push(Arc::clone(&status));
             segmenters.push((dev.clone(), Arc::clone(&seg)));
 
-            let pool_for_source = pool.clone();
+            let pool_for_source = Arc::clone(&pool);
             let dev_for_cb = dev.clone();
             let shutdown_for_source = Arc::clone(&shutdown);
 
@@ -161,7 +157,7 @@ impl CaptureEngine {
                 .spawn(move || {
                     source::run_source(&dev_for_cb.clone(), &status, &shutdown_for_source, {
                         let seg = Arc::clone(&seg);
-                        let pool = pool_for_source.clone();
+                        let pool = Arc::clone(&pool_for_source);
                         move |samples| {
                             // Short, effectively uncontended critical section: the
                             // only other holder is the flush at stop.
@@ -172,9 +168,7 @@ impl CaptureEngine {
                                 s.push(samples)
                             };
                             for segment in ready {
-                                if let Some(p) = pool.as_ref() {
-                                    p.submit(job(&dev_for_cb, segment));
-                                }
+                                pool.submit(job(&dev_for_cb, segment));
                             }
                         }
                     });
@@ -191,9 +185,7 @@ impl CaptureEngine {
                     for t in threads {
                         t.join().ok();
                     }
-                    if let Some(p) = pool.as_ref() {
-                        p.shutdown();
-                    }
+                    pool.shutdown();
                     return Err(e);
                 }
             }
@@ -229,7 +221,7 @@ impl CaptureEngine {
 
     /// Segments discarded because transcription fell behind.
     pub fn dropped_segments(&self) -> u64 {
-        self.pool.as_ref().map_or(0, |p| p.dropped())
+        self.pool.dropped()
     }
 
     /// Stop every source, flush trailing partial segments, and drain the pool.
@@ -250,29 +242,25 @@ impl CaptureEngine {
         // Flush after the sources are stopped so nothing races the final push.
         // Every capture thread has been joined by now, so their pool clones are
         // dropped and this is the last reference outside the workers themselves.
-        if let Some(pool) = self.pool.as_ref() {
-            for (dev, seg) in &self.segmenters {
-                let tail = seg
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .flush();
-                if let Some(samples) = tail {
-                    log::info!(
-                        "[audio] flushing {} trailing samples for {}",
-                        samples.len(),
-                        dev.name
-                    );
-                    pool.submit(job(dev, samples));
-                }
+        for (dev, seg) in &self.segmenters {
+            let tail = seg
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .flush();
+            if let Some(samples) = tail {
+                log::info!(
+                    "[audio] flushing {} trailing samples for {}",
+                    samples.len(),
+                    dev.name
+                );
+                self.pool.submit(job(dev, samples));
             }
         }
 
-        if let Some(pool) = self.pool.as_ref() {
-            pool.shutdown();
-            let dropped = pool.dropped();
-            if dropped > 0 {
-                log::warn!("[audio] {dropped} segment(s) were dropped this session");
-            }
+        self.pool.shutdown();
+        let dropped = self.pool.dropped();
+        if dropped > 0 {
+            log::warn!("[audio] {dropped} segment(s) were dropped this session");
         }
     }
 }
