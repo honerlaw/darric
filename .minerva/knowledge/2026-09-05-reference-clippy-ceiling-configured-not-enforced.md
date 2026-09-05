@@ -48,3 +48,4 @@ the `AGENTS.md` rule and have survived because nothing mechanically objects.
 ## Related
 
 - [[2026-09-05-reference-knowledge-wiki-is-ci-gated]] — the same repo's other gate, where the stated rule and the enforced rule do agree
+- [[2026-09-05-bug-prettierignore-misses-generated-tauri-schemas]] — see also
