@@ -1,7 +1,7 @@
 # Proposal: stop-feedback
 
 **Date**: 2026-09-05
-**Status**: Draft
+**Status**: Shipped (2026-09-05)
 
 ## Goal
 
@@ -60,14 +60,30 @@ click.
    capturing" is `isRecording && !isStopping`** everywhere it is asked. Both components
    compose the two booleans that way rather than each inventing its own reading.
 
-4. **`Header`** labels the button "Stopping…" and disables it — the one case where disabling
-   this button is correct, since the action it offers has already been taken. The
-   `recording · MM:SS` line becomes a `finishing · MM:SS` line with the pulse removed.
+4. **`Header`** labels the button "Stopping…" and marks it unavailable. It uses
+   `aria-disabled`, **not** the native `disabled` the original plan called for: the user has
+   just pressed this button, and `disabled` moves their focus to the body mid-interaction while
+   announcing nothing — the original confusion, relocated to assistive tech. The click it still
+   delivers is inert because of the hook guard in (2), and an `sr-only` `role="status"` carries
+   the phase (but not the ticking clock, which would narrate every second). The native
+   `disabled` is kept for the genuine cannot-start cases. The `recording · MM:SS` line becomes
+   `finishing · MM:SS` with every pulse removed, including the button's own dot. *(Review
+   finding 5.)*
 
-5. **`RecorderPane`** reports the recording as finishing rather than listening, in both the
-   elapsed line and the empty-transcript message. Its `isStopping` prop carries the **same**
-   `viewingSessionId === activeSessionId` gate `isRecording` already carries in `App.tsx`, so
-   a user who clicks to a past recording mid-stop does not see "finishing" on the wrong pane.
+5. **`RecorderPane`** reports the recording as finishing rather than listening, in the elapsed
+   line, the empty-transcript message and the blinking caret. Its `isStopping` prop carries the
+   **same** `viewingSessionId === activeSessionId` gate `isRecording` already carries in
+   `App.tsx`, so a user who clicks to a past recording mid-stop does not see "finishing" on the
+   wrong pane.
+
+6. **The dropped-segment poll stops at the click**, not when the command returns. `capture_drop_count`
+   reads the engine, which `stop_session` releases synchronously on entry, so a poll landing in
+   the window overwrites a real "transcription fell behind — N segments dropped" warning with
+   zero — and because the poll is gated on the recording being live, it never runs again. The
+   count is only readable before the click. Since the warning now outlives the recording, the
+   `droppedSegments` prop picks up the viewing-is-active gate too. Not in the original plan;
+   added from *review finding 6*, and the reason is recorded in
+   [[2026-09-05-reference-stop-session-releases-the-engine-before-teardown]].
 
 Rejected:
 
@@ -104,9 +120,21 @@ Rejected:
    [[2026-09-05-pattern-verifying-a-sequence-says-nothing-about-whether-it-runs]]).
 8. `npm run check` passes (typecheck, typecheck:node, lint, format, clippy, rustfmt, tests).
 
+## Deferred work
+
+Filed during promote; none is a regression from this diff.
+
+- honerlaw/darric#21 — the sidebar's recording dot never clears after a recording stops
+  (`activeSessionId` is never reset). *medium*
+- honerlaw/darric#22 — `isStarting` reaches `RecorderPane` without the viewing-is-active gate.
+  *medium*
+- honerlaw/darric#23 — a session switch during the post-stop linger appends flush lines to the
+  wrong transcript. *medium*
+
 ## Open Questions
 
-None blocking. One standing fact surfaced during design and deferred to promote:
-`stop_session` takes the engine and runs teardown without holding `session_transition`, so
-the "engine absent but still tearing down" window is guarded only by the frontend. Nothing
-reaches it today; it is worth recording rather than fixing here.
+None outstanding. The standing fact raised at design time — `stop_session` releases the engine
+and runs teardown without holding `session_transition`, so the window is guarded only by the
+frontend keeping `isRecording` true — is recorded in
+[[2026-09-05-reference-stop-session-releases-the-engine-before-teardown]] together with the
+three other consequences of that release. Nothing reaches the unguarded path today.
