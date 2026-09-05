@@ -140,8 +140,9 @@ fn devices_to_capture(state: &tauri::State<'_, AppState>) -> Vec<device::Capture
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
         .clone();
-    device::list_input_devices()
-        .into_iter()
+    let mut all = device::list_input_devices(&state.exclusions);
+    all.extend(device::list_output_devices(&state.exclusions));
+    all.into_iter()
         .filter(|d| !disabled.contains(&d.id))
         .collect()
 }
@@ -176,6 +177,7 @@ async fn begin_capture(
         WHISPER_WORKERS,
         &app,
         &state.db,
+        &state.exclusions,
     )?;
     *state
         .engine

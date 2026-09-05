@@ -267,3 +267,98 @@ showing a state the backend rejected. Now caught and logged; the `finally` refre
 - [decided] review triage, phase 2: 4 findings, all FIX, all fixed. One HIGH (`Arc::try_unwrap` disabling the pool) with a writable failure scenario — trailing segment lost on every stop, drop counter pinned at 0, two leaked threads per session. Two LOW with concrete scenarios (spawn-failure thread orphaning, unhandled toggle rejection) fixed rather than deferred because both were cheap and both leave the app in a state a user cannot recover from. One MEDIUM (blocking a Tokio worker in `stop_session`) fixed in the same pass because bug 1 was masking it.
 - [decided] promote partition, Mode B (phase 3 outstanding, so no Mode A pass yet). PROMOTE x4: the `Arc::try_unwrap` bug, the verification-shape pattern it exposed, the Metal serialisation measurement, and the `phase_progress` squash-merge bug found while shipping phase 1. DISCARD: routine gate logs.
 - [decided] the `phase_progress` finding is promoted even though it is a defect in minerva's own tooling rather than in darric. It was found here, it will bite the next phased unit in any squash-merging repo, and `.minerva/knowledge/` is where this project records what it learned — including about its own process.
+
+## Phase 3 implementation notes 2026-09-05
+
+### The survey the approach required paid for itself
+
+The proposal said to survey `bindgen -x objective-c` and existing crates **before** hand-writing
+the two tap signatures, because transcribing a C prototype that bindgen skipped is exactly the
+error a reviewer cannot see and a runtime cannot survive. The survey found
+`objc2-core-audio` 0.3.2, which already generates `AudioHardwareCreateProcessTap`,
+`AudioHardwareDestroyProcessTap`, `CATapDescription`, `AudioHardwareCreateAggregateDevice`,
+`AudioDeviceCreateIOProcIDWithBlock` and every constant needed, straight from the SDK headers.
+
+So **no C signature is declared by hand anywhere in this phase**. That removes the single largest
+risk the approach Skeptic identified. It also produced a better callback: the block-based
+`AudioDeviceCreateIOProcIDWithBlock` carries its captured state directly, instead of the raw
+function pointer plus `*mut c_void` userdata the older API forces.
+
+### What actually got built
+
+`audio/coreaudio.rs` — checked property reads (ask for the size, allocate exactly that, ask for
+the data) plus output-device enumeration and stream-format reading. `audio/tap.rs` — an
+`OutputTap` that owns a process tap, a private aggregate device and an IOProc, and unwinds all
+three in reverse on drop, including on partial-construction failure.
+
+Verified live on this machine before building anything on top of it: enumeration returns
+`uid="BuiltInSpeakerDevice" name="MacBook Pro Speakers"`. That is the first runtime-verified
+piece of phase 3 rather than a compile-time one.
+
+### The exclusion registry earns its place now
+
+Aggregates are created **private**, which hides them from other processes — but not from this
+one, and this is the process running `cpal`'s enumeration. So a private aggregate is _not_ on its
+own sufficient, and each tap registers its aggregate UID with `ExclusionRegistry`, which input
+enumeration filters against. Phase 2 deliberately deleted this type for having no caller; it is
+back because it now has two.
+
+### Two real defects clippy found in the unsafe code
+
+- **Alignment UB.** `*bytes.as_ptr().cast::<u32>()` dereferences a `*const u32` derived from a
+  `Vec<u8>` buffer, which carries only 1-byte alignment. `cast_ptr_alignment` caught it; fixed
+  with `read_unaligned`. This is the kind of thing that works on x86 and faults elsewhere, and it
+  would not have been caught by any test on this machine.
+- **A lossy `f64` -> `u32` cast** on the sample rate. Rather than suppress
+  `cast_possible_truncation`, the conversion is now an exact binary search over the `u32` range
+  using only `u32 -> f64` (which is exact), settling in 32 iterations — once per tap.
+
+Both were found by the lint policy this repo enforces, in code where the failure mode is silent.
+
+### A test of mine caught its own ambiguity
+
+`exact_u32_from_f64(f64::INFINITY)` returns 0, not `u32::MAX`: the non-finite guard fires before
+the saturating clamp. Rejecting garbage is the safer semantic — 0 is refused by every caller,
+whereas saturating would hand the resampler a 4-billion-hertz rate and produce convincing noise —
+so the behaviour stands and the doc comment now says so explicitly.
+
+### Permissions
+
+`NSScreenCaptureUsageDescription` and the `com.apple.security.screen-capture` entitlement are
+gone, replaced by `NSAudioCaptureUsageDescription`. They belonged to a ScreenCaptureKit path that
+was never implemented; taps are gated on audio recording, and that prompt is markedly less
+alarming to grant than screen recording.
+
+### The live tap test: how far it got, and the wall it hit
+
+Running `OutputTap::start` against the real built-in speakers from `cargo test`:
+
+```
+tapping "MacBook Pro Speakers" (BuiltInSpeakerDevice)
+!! TAP DID NOT START: AudioDeviceStart failed: OSStatus 268451843 (0x10004003)
+```
+
+Read carefully, this is more informative than a flat failure. `AudioHardwareCreateProcessTap`
+**succeeded**, `AudioHardwareCreateAggregateDevice` **succeeded**, and
+`AudioDeviceCreateIOProcIDWithBlock` **succeeded** — the construction sequence, the toll-free
+bridged `CFDictionary`, the tap-list structure and the UUID plumbing are all correct enough for
+Core Audio to accept them. Only the final `AudioDeviceStart` was refused, and the failure path
+destroyed the aggregate and the tap cleanly with no leaked system-wide audio objects.
+
+The cause is structural rather than a code defect: a bare `cargo test` binary has **no Info.plist
+and no bundle identifier**, so macOS TCC cannot associate it with an audio-recording grant or
+prompt for one. The `NSAudioCaptureUsageDescription` this needs lives in the _app bundle's_
+Info.plist. A tap can be created without the permission but cannot be started.
+
+**Consequence for verification: phase 3's capture path cannot be proven by `cargo test` at all.**
+It requires launching the built app and granting the permission. That is a real limit on what
+automated verification can establish here, and it should not be papered over — everything in
+phase 3 except device enumeration and teardown remains compile-verified rather than
+runtime-verified.
+
+### Findings pending promote (phase 3)
+
+- A Core Audio process tap can be **created** without the audio-recording permission and only
+  fails at `AudioDeviceStart`. The natural assumption is that creation would fail, so error
+  handling written around creation alone would report success on a tap that can never deliver
+  audio. Worth an entry together with the `cargo test` / TCC limitation.
