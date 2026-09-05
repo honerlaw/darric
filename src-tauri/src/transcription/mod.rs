@@ -113,7 +113,6 @@ mod bench {
     ///   cargo test --manifest-path src-tauri/Cargo.toml -- --ignored --nocapture pool_sizing
     #[test]
     #[ignore = "requires a downloaded whisper model; measures GPU behaviour"]
-    #[allow(clippy::unwrap_used)]
     fn pool_sizing_measurement() {
         const N: usize = 4;
 
@@ -122,15 +121,18 @@ mod bench {
             return;
         };
         println!("model: {}", path.display());
-        let t = Arc::new(Transcriber::new(path.to_str().unwrap()).unwrap());
+        let t = Arc::new(
+            Transcriber::new(path.to_str().expect("model path is valid UTF-8"))
+                .expect("load whisper model"),
+        );
         let seg = segment();
 
         // Warm up so model load and first-run Metal setup are not counted.
-        t.transcribe(&seg).unwrap();
+        t.transcribe(&seg).expect("warm-up transcription");
 
         let start = Instant::now();
         for _ in 0..N {
-            t.transcribe(&seg).unwrap();
+            t.transcribe(&seg).expect("serial transcription");
         }
         let serial = start.elapsed();
 
@@ -139,11 +141,11 @@ mod bench {
             .map(|_| {
                 let t = Arc::clone(&t);
                 let seg = seg.clone();
-                std::thread::spawn(move || t.transcribe(&seg).unwrap())
+                std::thread::spawn(move || t.transcribe(&seg).expect("parallel transcription"))
             })
             .collect();
         for h in handles {
-            h.join().unwrap();
+            h.join().expect("worker thread");
         }
         let parallel = start.elapsed();
 

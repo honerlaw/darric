@@ -25,7 +25,7 @@ pub async fn ensure_model(app: &AppHandle) -> Result<PathBuf> {
         return Ok(path);
     }
 
-    log::info!("[model] not found — downloading ggml-small.en-tdrz.bin (~466MB)");
+    log::info!("[model] not found — downloading {MODEL_FILENAME}");
     app.emit("model_download_start", ()).ok();
 
     let response = reqwest::get(MODEL_URL)
