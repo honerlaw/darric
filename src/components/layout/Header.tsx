@@ -4,8 +4,13 @@ import { formatElapsed } from "../../lib/utils";
 function recordLabel(
   isRecording: boolean,
   isStarting: boolean,
+  isStopping: boolean,
   downloadProgress: number | null,
 ): string {
+  // Checked before `isRecording`: the recording stays live for the whole stop,
+  // and leaving the label on "Stop" is what made a multi-second flush read as a
+  // click that did nothing.
+  if (isStopping) return "Stopping…";
   if (isRecording) return "Stop";
   // Checked before `isStarting`: pressing Record mid-download sets `isStarting`
   // too, and "Starting…" is the label that made the download look like a freeze.
@@ -14,9 +19,22 @@ function recordLabel(
   return "Record";
 }
 
+/** What a screen reader hears when the recording phase changes. */
+function phaseAnnouncement(isRecording: boolean, isStopping: boolean): string {
+  if (isStopping) return "Stopping — finishing transcription";
+  if (isRecording) return "Recording";
+  return "";
+}
+
 interface HeaderProps {
   isRecording: boolean;
   isStarting: boolean;
+  /**
+   * A stop is in flight: capture has ended but the backend is still flushing and
+   * transcribing. `isRecording` stays true throughout, so "actively capturing"
+   * is `isRecording && !isStopping`.
+   */
+  isStopping: boolean;
   /** Percentage of the speech model downloaded, or null when no download is in flight. */
   downloadProgress: number | null;
   elapsedSeconds: number;
@@ -27,14 +45,18 @@ interface HeaderProps {
 export function Header({
   isRecording,
   isStarting,
+  isStopping,
   downloadProgress,
   elapsedSeconds,
   onRecord,
   onStop,
 }: HeaderProps): React.JSX.Element {
-  // Gates starting a recording, never stopping one: this is one button serving
-  // both roles, and disabling it while `isRecording` would strand the user
-  // unable to stop an active recording until an unrelated download finished.
+  // A start that cannot proceed uses the native `disabled`: nothing was in
+  // progress on the button and there is no interaction to preserve. A stop in
+  // flight does not — the user has just pressed this button, and `disabled`
+  // moves their focus to the body mid-interaction while announcing nothing.
+  // `aria-disabled` keeps focus, and `useSession.stop` rejects the re-entrant
+  // call, so the click it still delivers is inert.
   const cannotStart = !isRecording && (isStarting || downloadProgress !== null);
 
   return (
@@ -48,23 +70,36 @@ export function Header({
 
       {isRecording && (
         <div className="flex items-center gap-2">
-          <span className="pulse-dot h-2 w-2 rounded-full bg-danger" />
+          <span
+            className={`h-2 w-2 rounded-full ${isStopping ? "bg-ink-4" : "pulse-dot bg-danger"}`}
+          />
           <span className="font-mono text-[11px] tracking-eyebrow text-ink-3 uppercase">
-            recording · {formatElapsed(elapsedSeconds)}
+            {isStopping ? "finishing" : "recording"} · {formatElapsed(elapsedSeconds)}
           </span>
         </div>
       )}
+
+      {/* The button's own label change is not announced, and the elapsed time in
+          the indicator above re-renders every second — a live region on that
+          would narrate the clock. This carries the phase alone, so it speaks
+          once per transition. */}
+      <span role="status" aria-live="polite" className="sr-only">
+        {phaseAnnouncement(isRecording, isStopping)}
+      </span>
 
       <button
         type="button"
         onClick={isRecording ? onStop : onRecord}
         disabled={cannotStart}
-        className="flex h-[30px] cursor-pointer items-center gap-[6px] rounded-full border border-line bg-paper px-[14px] text-[13px] text-ink transition-colors hover:border-line-strong hover:bg-paper-sunken disabled:cursor-default disabled:opacity-40"
+        aria-disabled={isStopping}
+        className="flex h-[30px] cursor-pointer items-center gap-[6px] rounded-full border border-line bg-paper px-[14px] text-[13px] text-ink transition-colors hover:border-line-strong hover:bg-paper-sunken disabled:cursor-default disabled:opacity-40 aria-disabled:cursor-default aria-disabled:opacity-40"
       >
         <span
-          className={`h-[7px] w-[7px] rounded-full bg-accent ${isRecording ? "pulse-dot" : ""}`}
+          className={`h-[7px] w-[7px] rounded-full bg-accent ${
+            isRecording && !isStopping ? "pulse-dot" : ""
+          }`}
         />
-        <span>{recordLabel(isRecording, isStarting, downloadProgress)}</span>
+        <span>{recordLabel(isRecording, isStarting, isStopping, downloadProgress)}</span>
       </button>
     </header>
   );

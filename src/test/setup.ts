@@ -17,9 +17,17 @@ function stubMatchMedia(): void {
   });
 }
 
+// jsdom implements no scrolling, and RecorderPane scrolls the transcript to the
+// newest line on every append — so any test rendering a non-empty transcript
+// throws before reaching its assertions.
+function stubScrollIntoView(): void {
+  Element.prototype.scrollIntoView = (): void => undefined;
+}
+
 beforeAll(() => {
   mockWindows("main");
   stubMatchMedia();
+  stubScrollIntoView();
 });
 
 beforeEach(() => {

@@ -20,6 +20,7 @@ export default function App(): React.JSX.Element {
     activeSessionId,
     isRecording,
     isStarting,
+    isStopping,
     downloadProgress,
     elapsedSeconds,
     error,
@@ -57,8 +58,12 @@ export default function App(): React.JSX.Element {
     if (isRecording && activeSessionId !== null) setViewingSessionId(activeSessionId);
   }, [isRecording, activeSessionId]);
 
+  // Stops at the click, not at the end of the stop. `capture_drop_count` reads
+  // the engine, and `stop_session` takes it synchronously on entry — so every
+  // poll during the stopping window returns 0 and would erase a "transcription
+  // fell behind" warning the user never gets another chance to see.
   useEffect(() => {
-    if (!isRecording) return;
+    if (!isRecording || isStopping) return;
     const timer = setInterval(() => {
       void captureDropCount()
         .then(setDroppedSegments)
@@ -69,7 +74,7 @@ export default function App(): React.JSX.Element {
     return () => {
       clearInterval(timer);
     };
-  }, [isRecording]);
+  }, [isRecording, isStopping]);
 
   const handleRecord = (): void => {
     void start("Recording").catch((err: unknown) => {
@@ -106,6 +111,7 @@ export default function App(): React.JSX.Element {
       <Header
         isRecording={isRecording}
         isStarting={isStarting}
+        isStopping={isStopping}
         downloadProgress={downloadProgress}
         elapsedSeconds={elapsedSeconds}
         onRecord={handleRecord}
@@ -131,9 +137,10 @@ export default function App(): React.JSX.Element {
           onToggleDevice={(id, enabled) => {
             void toggleDevice(id, enabled);
           }}
-          droppedSegments={droppedSegments}
+          droppedSegments={viewingSessionId === activeSessionId ? droppedSegments : 0}
           isRecording={isRecording && viewingSessionId === activeSessionId}
           isStarting={isStarting}
+          isStopping={isStopping && viewingSessionId === activeSessionId}
           elapsedSeconds={elapsedSeconds}
           canResume={!isRecording && downloadProgress === null}
           onResume={handleResume}
