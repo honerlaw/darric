@@ -260,3 +260,10 @@ showing a state the backend rejected. Now caught and logged; the `finally` refre
 - The `Arc::try_unwrap`-after-sharing pattern is worth an entry: it fails silently, it is
   guaranteed rather than racy once anything else holds a clone, and `.ok()` converts the failure
   into a plausible-looking `None`.
+
+## Balanced decisions 2026-09-05 (phase 2)
+
+- [reviewed — clean] completion verification, phase 2: Verifier verdict `accept`. It independently re-ran clippy, the full suite, the ignored hardware tests and the migration-list agreement check, and confirmed the pool-sizing comment matches the benchmark rather than being fabricated. Two non-blocking fix-ups folded: a stale download log still naming `ggml-small.en-tdrz.bin (~466MB)` after the model swap, and the last `#[allow(clippy::unwrap_used)]` sitting in `mod bench` rather than literally `mod tests` — resolved by replacing the unwraps with `expect`, leaving **zero** `#[allow]` anywhere.
+- [decided] review triage, phase 2: 4 findings, all FIX, all fixed. One HIGH (`Arc::try_unwrap` disabling the pool) with a writable failure scenario — trailing segment lost on every stop, drop counter pinned at 0, two leaked threads per session. Two LOW with concrete scenarios (spawn-failure thread orphaning, unhandled toggle rejection) fixed rather than deferred because both were cheap and both leave the app in a state a user cannot recover from. One MEDIUM (blocking a Tokio worker in `stop_session`) fixed in the same pass because bug 1 was masking it.
+- [decided] promote partition, Mode B (phase 3 outstanding, so no Mode A pass yet). PROMOTE x4: the `Arc::try_unwrap` bug, the verification-shape pattern it exposed, the Metal serialisation measurement, and the `phase_progress` squash-merge bug found while shipping phase 1. DISCARD: routine gate logs.
+- [decided] the `phase_progress` finding is promoted even though it is a defect in minerva's own tooling rather than in darric. It was found here, it will bite the next phased unit in any squash-merging repo, and `.minerva/knowledge/` is where this project records what it learned — including about its own process.
