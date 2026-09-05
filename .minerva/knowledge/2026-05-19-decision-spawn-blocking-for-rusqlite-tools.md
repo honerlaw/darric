@@ -5,6 +5,10 @@
 **Summary**: every MCP tool handler dispatches its rusqlite query through `tokio::task::spawn_blocking` — don't strip it, it prevents runtime stalls and satisfies `unused_async`
 **Context**: .minerva/work/2026-05-19-mcp-server
 
+<!-- superseded-by: 2026-09-05-decision-strip-darric-to-a-recorder -->
+
+> **Superseded by [[2026-09-05-decision-strip-darric-to-a-recorder]]** (2026-09-05)
+
 ## Context
 
 The MCP tool handler functions in `src-tauri/src/mcp_server/service/mod.rs` are `async fn` (required by rmcp's `#[tool]` macro). The underlying query layer in `queries.rs` is synchronous — it locks `DbConn(Mutex<rusqlite::Connection>)` and runs `rusqlite` calls, which are blocking I/O.

@@ -110,3 +110,9 @@ textbox present, but the mutation experiment was not run.
 - The other three MCP decision entries describe code this phase deletes; supersede at promote.
   `2026-05-19-decision-inline-tests-for-mcp-queries` is the exception — its predicted cost came
   due here exactly as written, so it stays live.
+
+## Balanced decisions 2026-09-05 (promote, phase 1)
+
+- [decided] promote partition, Mode B (per `phasing.md`, the full Mode A pass belongs before the FINAL phase's ship, not phase 1's). PROMOTE ×5: `2026-09-05-decision-strip-darric-to-a-recorder`, `2026-09-05-reference-knowledge-wiki-is-ci-gated`, `2026-09-05-reference-clippy-ceiling-configured-not-enforced`, `2026-09-05-bug-prettierignore-misses-generated-tauri-schemas`, `2026-09-05-pattern-ui-rewrites-drop-state-guards-not-markup`. Four supersession banners written: the three MCP decisions retired by the strip, and the stale CI-gating reference replaced by the entry stating current truth. DISCARD: the routine gate log. No TODOs — nothing deferred that lacks a trigger, because phases 2 and 3 are the trigger and they are declared in the proposal.
+- [decided] promoted knowledge in phase 1's PR rather than holding it to the end. A unit abandoned after phase 1 would otherwise strand all five entries, and three of them describe facts about the repo that are true regardless of whether phases 2-3 ever land.
+- `knowledge_lint.py`: 0 errors, 9 warnings, all `pending reconciliation` — the expected add-only shape. The supersession banners satisfied the reciprocal check for the four superseded entries, so only the five genuinely new forward links are unreciprocated.
