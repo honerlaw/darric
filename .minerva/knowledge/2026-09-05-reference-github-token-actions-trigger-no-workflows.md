@@ -49,3 +49,4 @@ before merging, once on the squash commit afterwards — because nothing else wi
 
 - [[2026-09-05-reference-knowledge-wiki-is-ci-gated]] — the entry this qualifies: true for every pull request but the reconciliation one
 - [[2026-09-05-pattern-auto-merge-on-a-pr-that-can-carry-no-checks]] — the merge-mechanism consequence of having no checks
+- [[2026-09-05-pattern-an-automated-gate-must-be-scoped-to-what-its-pipeline-changed]] — see also
