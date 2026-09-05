@@ -5,6 +5,10 @@
 **Summary**: use `#[tool_handler(router = self.tool_router)]`, never the bare form — the bare form leaves the field dead and needs an `#[allow]` this repo forbids
 **Context**: .minerva/work/2026-05-19-mcp-server
 
+<!-- superseded-by: 2026-09-05-decision-strip-darric-to-a-recorder -->
+
+> **Superseded by [[2026-09-05-decision-strip-darric-to-a-recorder]]** (2026-09-05)
+
 ## Context
 
 rmcp's `#[tool_router]` macro generates a `Self::tool_router()` static method that builds a `ToolRouter<Self>` from `#[tool(...)]`-annotated impl methods. The official rmcp examples (see `examples/servers/src/common/counter.rs`) follow this pattern:

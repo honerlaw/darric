@@ -9,9 +9,7 @@ function makeSession(started_at: string): Session {
     started_at,
     ended_at: null,
     created_at: started_at,
-    notes: "",
     recorded_minutes: 0,
-    tags: [],
   };
 }
 

@@ -87,15 +87,55 @@ fn list_ordered_by_started_at_desc() -> rusqlite::Result<()> {
 }
 
 #[test]
-fn notes_field_defaults_to_empty_string() -> rusqlite::Result<()> {
+fn strip_migration_removes_retired_tables() -> rusqlite::Result<()> {
     let conn = common::open_test_db();
-    insert_session(&conn, SESSION_ID, None, TS_EARLY)?;
 
-    let notes: String = conn.query_row(
-        "SELECT notes FROM sessions WHERE id = ?1",
-        params![SESSION_ID],
+    for table in [
+        "notes",
+        "tasks",
+        "tags",
+        "session_tags",
+        "note_tags",
+        "task_tags",
+        "chat_messages",
+    ] {
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            params![table],
+            |row| row.get(0),
+        )?;
+        assert_eq!(count, 0, "table {table} should have been dropped");
+    }
+    Ok(())
+}
+
+#[test]
+fn strip_migration_removes_session_notes_column() -> rusqlite::Result<()> {
+    let conn = common::open_test_db();
+    let has_notes: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('sessions') WHERE name = 'notes'",
+        [],
         |row| row.get(0),
     )?;
-    assert_eq!(notes, "");
+    assert_eq!(has_notes, 0);
+    Ok(())
+}
+
+#[test]
+fn strip_migration_keeps_recorder_tables() -> rusqlite::Result<()> {
+    let conn = common::open_test_db();
+    for table in [
+        "sessions",
+        "transcript_lines",
+        "recording_segments",
+        "settings",
+    ] {
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            params![table],
+            |row| row.get(0),
+        )?;
+        assert_eq!(count, 1, "table {table} should still exist");
+    }
     Ok(())
 }

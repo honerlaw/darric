@@ -25,14 +25,9 @@
     "check": "npm run typecheck && npm run typecheck:node && npm run lint && npm run format && npm run lint:rust && npm run format:rust && npm run test"
   },
   "dependencies": {
-    "@dnd-kit/core": "^6.3.1",
-    "@dnd-kit/sortable": "^10.0.0",
-    "@dnd-kit/utilities": "^3.2.2",
-    "@tanstack/react-virtual": "^3.13.24",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
     "geist": "^1.7.0",
-    "marked": "^18.0.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

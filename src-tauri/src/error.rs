@@ -16,12 +16,6 @@ pub enum AppError {
     NoSession,
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("ai error: {0}")]
-    Ai(String),
-    #[error("json error: {0}")]
-    Json(#[from] serde_json::Error),
-    #[error("mcp server error: {0}")]
-    McpServer(String),
 }
 
 impl serde::Serialize for AppError {

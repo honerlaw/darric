@@ -1,16 +1,17 @@
 # Darric
 
-A macOS desktop app for meeting capture and personal work management. Records audio, transcribes speech locally using Whisper, and lets you chat with Claude or Gemini about your notes and sessions.
+A macOS desktop app that records audio and transcribes it locally with Whisper.
 
 Built with Tauri 2, Rust, React, and TypeScript.
 
 ## Features
 
-- Audio capture from microphone and system audio
+- Audio capture from the microphone
 - Local transcription via Whisper (runs on-device with Metal)
-- AI chat (Claude or Gemini) with MCP server support
-- Meeting sessions with notes, tasks, and timeline views
-- SQLite-backed persistence — all data stays on your machine
+- Recordings persist to SQLite — all data stays on your machine
+
+Multi-device capture (every input and output device at once, with per-device transcript
+attribution) is in progress; see `.minerva/work/2026-09-05-strip-to-recorder/proposal.md`.
 
 ## Prerequisites
 
@@ -32,32 +33,32 @@ npm install
 npm run tauri:dev
 ```
 
-This starts the Vite dev server and the Tauri app together. On first launch, Darric will automatically download the Whisper model (~466 MB) to `~/Library/Application Support/darric/`. This only happens once.
-
-**3. Configure an AI provider**
-
-Open Settings in the app and enter an API key for Claude (Anthropic) or Gemini (Google). The key is stored locally in the app's SQLite database.
+This starts the Vite dev server and the Tauri app together. On first launch, Darric will
+automatically download the Whisper model to `~/Library/Application Support/darric/`. This only
+happens once.
 
 ## Other Commands
 
 ```sh
-npm run check          # Typecheck, lint, and format all code (TS + Rust)
-npm run lint:fix       # Auto-fix JS/TS lint issues
-npm run format:fix     # Auto-format JS/TS with Prettier
+npm run check           # Typecheck, lint, and format all code (TS + Rust)
+npm run lint:fix        # Auto-fix JS/TS lint issues
+npm run format:fix      # Auto-format JS/TS with Prettier
 npm run format:rust:fix # Auto-format Rust with rustfmt
 ```
+
+Note that `npm run check` does not run the Rust test suite; run `cargo test --manifest-path
+src-tauri/Cargo.toml` for that.
 
 ## Project Structure
 
 ```
 src/                  # React frontend
-  screens/            # Top-level views (Meeting, Notes, Board, Timeline)
-  components/         # Shared UI components
+  components/         # Header, recordings list, recorder pane
+  hooks/              # Session and transcript state
 src-tauri/            # Rust backend
   src/
-    audio/            # Microphone and system audio capture
+    audio/            # Audio capture
     transcription/    # Whisper integration
-    ai/               # Claude and Gemini providers, MCP client
     commands/         # Tauri commands exposed to the frontend
     db/               # SQLite setup and migrations
 ```

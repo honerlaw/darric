@@ -5,6 +5,10 @@
 **Summary**: depend on rmcp 1.7 (the official Rust MCP SDK) for protocol framing and streamable HTTP; the 1.4 floor is a DNS-rebinding CVE fix
 **Context**: .minerva/work/2026-05-19-mcp-server
 
+<!-- superseded-by: 2026-09-05-decision-strip-darric-to-a-recorder -->
+
+> **Superseded by [[2026-09-05-decision-strip-darric-to-a-recorder]]** (2026-09-05)
+
 ## Context
 
 darric needs to host an MCP server inside the running Tauri app so external AI tools (Claude Desktop, Claude CLI) can read its data over a localhost HTTP endpoint. Two viable shapes:

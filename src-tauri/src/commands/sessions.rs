@@ -1,6 +1,5 @@
 use crate::{
     audio,
-    commands::tags::Tag,
     error::{AppError, Result},
     state::AppState,
     transcription::Transcriber,
@@ -72,9 +71,7 @@ pub struct Session {
     pub started_at: String,
     pub ended_at: Option<String>,
     pub created_at: String,
-    pub notes: String,
     pub recorded_minutes: i64,
-    pub tags: Vec<Tag>,
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -169,15 +166,10 @@ pub async fn stop_session(state: tauri::State<'_, AppState>) -> Result<()> {
 pub async fn list_sessions(state: tauri::State<'_, AppState>) -> Result<Vec<Session>> {
     let db = state.db.0.lock().unwrap();
     let mut stmt = db.prepare(
-        "SELECT s.id, s.topic, s.started_at, s.ended_at, s.created_at, s.notes,
+        "SELECT s.id, s.topic, s.started_at, s.ended_at, s.created_at,
            COALESCE(CAST(SUM(
              (julianday(COALESCE(seg.ended_at, datetime('now'))) - julianday(seg.started_at)) * 1440
-           ) AS INTEGER), 0) as recorded_minutes,
-           COALESCE((
-             SELECT json_group_array(json_object('id', t.id, 'name', t.name))
-             FROM session_tags j JOIN tags t ON t.id = j.tag_id
-             WHERE j.session_id = s.id
-           ), '[]') as tags_json
+           ) AS INTEGER), 0) as recorded_minutes
          FROM sessions s
          LEFT JOIN recording_segments seg ON seg.session_id = s.id
          GROUP BY s.id
@@ -185,17 +177,13 @@ pub async fn list_sessions(state: tauri::State<'_, AppState>) -> Result<Vec<Sess
     )?;
     let sessions = stmt
         .query_map([], |row| {
-            let tags_json: String = row.get(7)?;
-            let tags = serde_json::from_str::<Vec<Tag>>(&tags_json).unwrap_or_default();
             Ok(Session {
                 id: row.get(0)?,
                 topic: row.get(1)?,
                 started_at: row.get(2)?,
                 ended_at: row.get(3)?,
                 created_at: row.get(4)?,
-                notes: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
-                recorded_minutes: row.get(6)?,
-                tags,
+                recorded_minutes: row.get(5)?,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -225,32 +213,23 @@ pub async fn update_session(
         rusqlite::params![topic, id],
     )?;
     let mut stmt = db.prepare(
-        "SELECT s.id, s.topic, s.started_at, s.ended_at, s.created_at, s.notes,
+        "SELECT s.id, s.topic, s.started_at, s.ended_at, s.created_at,
            COALESCE(CAST(SUM(
              (julianday(COALESCE(seg.ended_at, datetime('now'))) - julianday(seg.started_at)) * 1440
-           ) AS INTEGER), 0) as recorded_minutes,
-           COALESCE((
-             SELECT json_group_array(json_object('id', t.id, 'name', t.name))
-             FROM session_tags j JOIN tags t ON t.id = j.tag_id
-             WHERE j.session_id = s.id
-           ), '[]') as tags_json
+           ) AS INTEGER), 0) as recorded_minutes
          FROM sessions s
          LEFT JOIN recording_segments seg ON seg.session_id = s.id
          WHERE s.id = ?1
          GROUP BY s.id",
     )?;
     let session = stmt.query_row(rusqlite::params![id], |row| {
-        let tags_json: String = row.get(7)?;
-        let tags = serde_json::from_str::<Vec<Tag>>(&tags_json).unwrap_or_default();
         Ok(Session {
             id: row.get(0)?,
             topic: row.get(1)?,
             started_at: row.get(2)?,
             ended_at: row.get(3)?,
             created_at: row.get(4)?,
-            notes: row.get::<_, Option<String>>(5)?.unwrap_or_default(),
-            recorded_minutes: row.get(6)?,
-            tags,
+            recorded_minutes: row.get(5)?,
         })
     })?;
     Ok(session)
@@ -300,20 +279,6 @@ pub async fn resume_session(
     }
 
     Ok(id)
-}
-
-#[tauri::command]
-pub async fn update_session_notes(
-    state: tauri::State<'_, AppState>,
-    id: String,
-    notes: String,
-) -> Result<()> {
-    let db = state.db.0.lock().unwrap();
-    db.execute(
-        "UPDATE sessions SET notes = ?1 WHERE id = ?2",
-        rusqlite::params![notes, id],
-    )?;
-    Ok(())
 }
 
 #[tauri::command]

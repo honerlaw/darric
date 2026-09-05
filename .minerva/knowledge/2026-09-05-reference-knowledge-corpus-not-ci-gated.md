@@ -5,6 +5,10 @@
 **Summary**: `check.yml` runs TypeScript/Rust builds and tests only — nothing runs `knowledge_lint.py`, so index drift and broken `[[…]]` wikilinks reach `main` green
 **Context**: .minerva/work/2026-09-05-knowledge-wiki-migration
 
+<!-- superseded-by: 2026-09-05-reference-knowledge-wiki-is-ci-gated -->
+
+> **Superseded by [[2026-09-05-reference-knowledge-wiki-is-ci-gated]]** (2026-09-05)
+
 ## Context
 
 `.github/workflows/check.yml` is darric's only workflow. It triggers on `push` to `main` and on
