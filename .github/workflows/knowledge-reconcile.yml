@@ -1,0 +1,89 @@
+name: Reconcile Knowledge
+
+# minerva:promote is add-only: on a work-unit branch it writes new
+# .minerva/knowledge/<date>-<type>-<slug>.md entries and touches no aggregate.
+# That is what keeps concurrent minerva PRs conflict-free -- a branch's
+# .minerva/ footprint is purely additions, and new files always merge cleanly.
+#
+# The deferred half (index.md catalog lines, the watermark, reciprocal
+# ## Related links, supersession banners) is written here, on the default
+# branch, where there is exactly one writer at a time.
+#
+# IMPORTANT: installing this workflow makes `minerva:cleanup` stand down from
+# reconciliation -- it greps .github/workflows/ for `knowledge_fix.py` and skips
+# its own pass when it finds one, because two unserialised writers would both
+# open PRs editing index.md. Two consequences:
+#   * reconciliation now happens on merge, without anyone running cleanup;
+#   * overview.md is NOT refreshed here. Synthesis is a judgment call, not a
+#     deterministic rewrite, so it stays with `minerva:synthesize` -- run it by
+#     hand when `synthesis_status` reports un-synthesized entries.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".minerva/knowledge/**"
+  workflow_dispatch:
+
+# One reconciler at a time. Do not cancel in progress: a cancelled run can leave
+# a pushed branch with no PR opened for it.
+concurrency:
+  group: knowledge-reconcile
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  reconcile:
+    name: Reconcile index
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out minerva tooling
+        uses: actions/checkout@v4
+        with:
+          repository: honerlaw/agent-marketplace
+          path: .minerva-tools
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Apply mechanical fixes
+        run: python .minerva-tools/plugins/minerva/scripts/knowledge_fix.py .minerva/knowledge
+
+      - name: Open a reconciliation PR if anything changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # .minerva-tools is an untracked checkout path -- scope to the corpus.
+          if git diff --quiet -- .minerva/knowledge; then
+            echo "reconciliation: nothing pending"
+            exit 0
+          fi
+
+          BRANCH="minerva/reconcile-ci/${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add .minerva/knowledge
+          git commit -m "chore: reconcile knowledge index"
+          # Never --force: a non-forced push to a run-unique ref cannot clobber
+          # another run's branch.
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --head "$BRANCH" \
+            --base main \
+            --title "chore: reconcile knowledge index" \
+            --body "$(printf '%s\n' \
+              'Derived content, regenerated from the corpus by `knowledge_fix.py` -- no authored judgment to review.' \
+              '' \
+              'Adds catalog lines from each entry'"'"'s `**Summary**`, bumps the watermark, writes missing reciprocal `## Related` links and supersession banners, and relocates wrong-Type lines.' \
+              '' \
+              "Triggered by ${GITHUB_SHA}.")"
