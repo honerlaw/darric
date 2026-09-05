@@ -38,8 +38,18 @@ interface HeaderProps {
   /** Percentage of the speech model downloaded, or null when no download is in flight. */
   downloadProgress: number | null;
   elapsedSeconds: number;
+  /**
+   * The name of the recording Resume would continue, or null when there is
+   * nothing to continue: no recording is selected, one is already in flight, a
+   * start is already in flight, or the speech model is still downloading. Null
+   * hides the button rather than disabling it — there is nothing for it to act
+   * on. Carrying the name rather than a bare boolean is what lets the button say
+   * which recording it appends to, now that it no longer sits beside one.
+   */
+  resumeTarget: string | null;
   onRecord: () => void;
   onStop: () => void;
+  onResume: () => void;
 }
 
 export function Header({
@@ -48,8 +58,10 @@ export function Header({
   isStopping,
   downloadProgress,
   elapsedSeconds,
+  resumeTarget,
   onRecord,
   onStop,
+  onResume,
 }: HeaderProps): React.JSX.Element {
   // A start that cannot proceed uses the native `disabled`: nothing was in
   // progress on the button and there is no interaction to preserve. A stop in
@@ -86,6 +98,19 @@ export function Header({
       <span role="status" aria-live="polite" className="sr-only">
         {phaseAnnouncement(isRecording, isStopping)}
       </span>
+
+      {resumeTarget !== null && (
+        // Sits beside Record because it is the same action against an existing
+        // recording: both ways to begin capturing are in one place.
+        <button
+          type="button"
+          onClick={onResume}
+          aria-label={`Resume recording “${resumeTarget}”`}
+          className="flex h-[30px] cursor-pointer items-center rounded-full border border-line bg-paper px-[14px] text-[13px] text-ink transition-colors hover:border-line-strong hover:bg-paper-sunken"
+        >
+          Resume
+        </button>
+      )}
 
       <button
         type="button"

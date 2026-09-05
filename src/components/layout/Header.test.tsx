@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { Header } from "./Header";
 
 const BASE_PROPS = {
@@ -8,8 +9,10 @@ const BASE_PROPS = {
   isStopping: false,
   downloadProgress: null,
   elapsedSeconds: 0,
+  resumeTarget: null,
   onRecord: (): void => undefined,
   onStop: (): void => undefined,
+  onResume: (): void => undefined,
 };
 
 describe("Header record button", () => {
@@ -97,5 +100,43 @@ describe("Header record button", () => {
     const button = screen.getByRole("button");
     expect(button).toHaveTextContent("Stop");
     expect(button).toBeEnabled();
+  });
+});
+
+describe("Header resume button", () => {
+  it("offers Resume beside Record when a stopped recording is selected", () => {
+    render(<Header {...BASE_PROPS} resumeTarget="Standup" />);
+
+    // The button names what it acts on: in the pane it sat under the recording
+    // it would continue, and in global chrome nothing else says which one.
+    const resume = screen.getByRole("button", { name: "Resume recording “Standup”" });
+    const record = screen.getByRole("button", { name: /Record/ });
+    expect(resume).toBeInTheDocument();
+    // Immediately beside Record, not merely somewhere else in the chrome — the
+    // whole point of the move is that both ways to begin capturing sit together.
+    expect(record.previousElementSibling).toBe(resume);
+  });
+
+  it("withholds Resume when there is nothing resumable", () => {
+    // `canResume` is false for four distinct reasons (nothing selected, a
+    // recording in flight, a start in flight, a model download). The header only
+    // has to honour the answer.
+    render(<Header {...BASE_PROPS} />);
+
+    expect(screen.queryByRole("button", { name: /Resume recording/ })).toBeNull();
+  });
+
+  it("resumes rather than starting a new recording when pressed", async () => {
+    const user = userEvent.setup();
+    const onResume = vi.fn();
+    const onRecord = vi.fn();
+    render(
+      <Header {...BASE_PROPS} resumeTarget="Standup" onResume={onResume} onRecord={onRecord} />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /Resume recording/ }));
+
+    expect(onResume).toHaveBeenCalledTimes(1);
+    expect(onRecord).not.toHaveBeenCalled();
   });
 });

@@ -23,9 +23,7 @@ const BASE_PROPS = {
   isRecording: false,
   isStarting: false,
   isStopping: false,
-  canResume: true,
   elapsedSeconds: 0,
-  onResume: (): void => undefined,
 };
 
 describe("RecorderPane title editing", () => {

@@ -8,6 +8,7 @@ import { useDevices } from "./hooks/useDevices";
 import { useSession } from "./hooks/useSession";
 import { useTranscript } from "./hooks/useTranscript";
 import { captureDropCount } from "./lib/tauri";
+import { sessionLabel } from "./lib/utils";
 
 /** How often the dropped-segment counter refreshes while recording. */
 const DROP_POLL_MS = 2000;
@@ -123,8 +124,14 @@ export default function App(): React.JSX.Element {
         isStopping={isStopping}
         downloadProgress={downloadProgress}
         elapsedSeconds={elapsedSeconds}
+        resumeTarget={
+          viewingSession !== null && !isRecording && !isStarting && downloadProgress === null
+            ? sessionLabel(viewingSession)
+            : null
+        }
         onRecord={handleRecord}
         onStop={handleStop}
+        onResume={handleResume}
       />
 
       <div className="border-t border-line" />
@@ -151,8 +158,6 @@ export default function App(): React.JSX.Element {
           isStarting={startingSessionId !== null && viewingSessionId === startingSessionId}
           isStopping={isStopping && viewingSessionId === activeSessionId}
           elapsedSeconds={elapsedSeconds}
-          canResume={!isRecording && downloadProgress === null}
-          onResume={handleResume}
           onRename={handleRename}
         />
       </div>

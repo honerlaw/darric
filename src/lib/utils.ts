@@ -34,3 +34,11 @@ export function groupSessionsByDate(sessions: Session[]): Record<string, Session
   }
   return groups;
 }
+
+/**
+ * What to call a recording in prose. One answer, used by every label site — an
+ * empty-string topic and a null one must not name the same recording differently.
+ */
+export function sessionLabel(session: Session): string {
+  return session.topic !== null && session.topic.length > 0 ? session.topic : "Untitled recording";
+}
