@@ -44,3 +44,4 @@ defect is in the shape of the question.
 ## Related
 
 - [[2026-09-05-bug-arc-try-unwrap-after-sharing-fails-silently]] — the defect that got through
+- [[2026-09-05-pattern-an-early-return-can-make-a-feature-unreachable]] — see also

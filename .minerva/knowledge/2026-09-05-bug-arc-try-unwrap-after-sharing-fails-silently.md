@@ -55,3 +55,4 @@ other holder. The type now makes the mistake unexpressible.
 ## Related
 
 - [[2026-09-05-pattern-verifying-a-sequence-says-nothing-about-whether-it-runs]] — how this survived a completion check that looked directly at the affected function
+- [[2026-09-05-bug-concurrent-model-downloads-share-one-tmp-file]] — see also

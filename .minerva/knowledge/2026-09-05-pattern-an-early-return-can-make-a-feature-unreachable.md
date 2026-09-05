@@ -51,3 +51,4 @@ rendered from `App`, above the pane, where the state it displays actually lives.
 - [[2026-09-05-pattern-verifying-a-sequence-says-nothing-about-whether-it-runs]] — the same question, "does this code run at all?", asked of a component's mount point rather than a Rust guard
 - [[2026-09-05-pattern-ui-rewrites-drop-state-guards-not-markup]] — another defect this rewrite left behind that is invisible in a screenshot
 - [[2026-09-05-decision-strip-darric-to-a-recorder]] — the rewrite that produced the misplaced mount
+- [[2026-09-05-constraint-tauri-events-from-setup-reach-no-webview]] — see also
