@@ -23,7 +23,7 @@ only when a human invokes `minerva:lint` — nothing runs it on a PR.
 
 A hand-edit or a merge that drops a catalog line, or renames an entry file without retargeting
 the wikilinks pointing at it, therefore lands on `main` with CI green. The rot is silent: the
-index still *looks* like a catalog, and an agent following it reaches a stem that no longer
+index still _looks_ like a catalog, and an agent following it reaches a stem that no longer
 resolves.
 
 ## Implications
@@ -36,4 +36,5 @@ resolves.
   not a defect: nothing is currently broken, and the failure needs a future bad edit to trigger.
 
 ## Related
+
 - [[2026-09-05-reference-claude-md-symlinks-to-agents-md]] — the other unguarded fact about this repo's agent-records layer

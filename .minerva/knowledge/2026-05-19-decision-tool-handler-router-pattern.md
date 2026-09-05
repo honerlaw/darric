@@ -55,5 +55,6 @@ This binds the macro-generated routing logic to the instance field, so the field
 - The stored `tool_router` field is now load-bearing — don't remove it on the assumption that the macro creates one for you.
 
 ## Related
+
 - [[2026-05-19-decision-rmcp-as-mcp-sdk]] — depends on the rmcp pin chosen there
 - [[2026-05-19-decision-inline-tests-for-mcp-queries]] — also decided by this repo's no-`#[allow]`-outside-tests policy

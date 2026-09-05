@@ -13,7 +13,7 @@ Success criterion 4 read:
 
 Nothing about the work or the approach. The criterion as worded cannot be satisfied by
 any correct execution of this unit, because the unit's own record has to name the layout
-it migrated *from*. At completion verification the sweep returned 10 hits, all of them in
+it migrated _from_. At completion verification the sweep returned 10 hits, all of them in
 `.minerva/work/2026-09-05-knowledge-wiki-migration/proposal.md` and `scratchpad.md` —
 the Goal, the Why, the rename table, the rejected alternatives, and criterion 4 quoting
 itself.
@@ -30,7 +30,7 @@ relative links in `2026-05-19-mcp-server/proposal.md` and the `AGENTS.md` Routin
 
 ### New plan
 
-Restate criterion 4 to say what it was always meant to test: no *live* pointer survives.
+Restate criterion 4 to say what it was always meant to test: no _live_ pointer survives.
 Historical and self-referential prose is explicitly out of its scope, and the archived
 scratchpad is named so a later reader does not "fix" it.
 

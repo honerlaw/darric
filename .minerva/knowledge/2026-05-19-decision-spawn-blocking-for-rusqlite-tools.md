@@ -34,5 +34,6 @@ json_result(&value)
 - If we ever add write-tools, they should follow the same pattern (writes block too) and additionally take a lock on any in-app state that mirrors the DB.
 
 ## Related
+
 - [[2026-05-19-decision-rmcp-as-mcp-sdk]] — handler asyncness comes from rmcp's `#[tool]` macro
 - [[2026-05-19-decision-inline-tests-for-mcp-queries]] — the sync query layer offloaded here is the one tested inline

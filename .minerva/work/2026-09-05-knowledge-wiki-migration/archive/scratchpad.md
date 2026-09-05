@@ -1,6 +1,7 @@
 # Scratchpad: knowledge-wiki-migration
 
 ## Quick decisions 2026-09-05
+
 - [decided] pre-flight: no in-flight collision — 2026-05-19-mcp-server is `in_flight: False` (promoted/Shipped via work_status predicate), only `main` local+remote, zero open PRs, 0 peer sessions after live+interactive+`darric-` prefix filter (37 -> 0). No messages sent.
 - [decided] open-issue match: `gh` authed, issues enabled on honerlaw/darric, zero open issues — no match, no ask.
 - [decided] scope check: one work unit, one PR, no phases. Records-only change (4 entries + index + 2 pointer files); no source, build config or runtime behavior touched.
@@ -11,12 +12,14 @@
 - [decided] `overview.md` NOT written in this unit — shared aggregate, written on the default branch by `minerva:cleanup` after merge (phases.md Phase 4, "No synthesis phase here").
 
 ## Notes
+
 - Landing dates derived via `knowledge_rename.landing_date`: all four entries -> 2026-05-19. Distinct slugs, so no collision.
 - `CLAUDE.md` is a symlink to `AGENTS.md`; editing AGENTS.md covers both.
-- [decided] replan accepted: criterion 4 was unsatisfiable as worded (the unit's own record must name its source layout). Amended to test for *live* pointers only; archived boilerplate in 2026-05-19-mcp-server/archive/scratchpad.md left as written per migrate-fix's "prose recounting an old number" rule. No change to approach or diff.
+- [decided] replan accepted: criterion 4 was unsatisfiable as worded (the unit's own record must name its source layout). Amended to test for _live_ pointers only; archived boilerplate in 2026-05-19-mcp-server/archive/scratchpad.md left as written per migrate-fix's "prose recounting an old number" rule. No change to approach or diff.
 - [decided] AGENTS.md Routing section written from the template-of-record verbatim, including the `.minerva/reference/` bullet even though that directory does not exist in darric. Omitting it would make the section read as permanently stale to `minerva:init`'s staleness check, which is disjunctive over the template's `.minerva/...` bullets. Don't delete the bullet.
 
 ## Review triage 2026-09-05
+
 - F1 [FIX] empty `.minerva/decisions/` left on disk after the git mv — rmdir'd. (Not tracked; git removes it on checkout after merge anyway.)
 - F2 [SUGGEST->logged] `.minerva/reference/` bullet points at a non-existent dir — deliberate, rationale recorded above.
 - F3 [IGNORE] no `overview.md` — by design; `minerva:cleanup` writes it on the default branch post-merge. Already stated in the proposal's Open Questions.

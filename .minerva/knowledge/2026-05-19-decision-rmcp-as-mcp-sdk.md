@@ -26,5 +26,6 @@ Depend on `rmcp = "1.7"` with features `server, macros, transport-streamable-htt
 - If rmcp ever materially breaks API in a major release, we re-evaluate hand-rolling — the existing MCP client code is the precedent and could be extended to a server. The trigger would be either a CVE without a fix or unmaintained-crate status.
 
 ## Related
+
 - [[2026-05-19-decision-tool-handler-router-pattern]] — the macro system this pins is what forces the explicit router form
 - [[2026-05-19-decision-spawn-blocking-for-rusqlite-tools]] — rmcp's `#[tool]` macro is what makes every handler an `async fn`

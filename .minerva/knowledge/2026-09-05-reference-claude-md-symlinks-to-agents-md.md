@@ -17,7 +17,7 @@ One file, two names, so Claude Code and other agent harnesses read the same inst
 
 ## Finding
 
-Edits must go to `AGENTS.md`, or through a tool that follows the link. An editor that *replaces*
+Edits must go to `AGENTS.md`, or through a tool that follows the link. An editor that _replaces_
 the path — writing a whole new file at `CLAUDE.md` rather than modifying the target — breaks the
 link and leaves two independent files that immediately begin to diverge. Nothing detects this:
 both paths still exist and still contain plausible instructions, so the next reader of
@@ -30,4 +30,5 @@ both paths still exist and still contain plausible instructions, so the next rea
 - The same applies to `GEMINI.md` if it is ever added under the same convention.
 
 ## Related
+
 - [[2026-09-05-reference-knowledge-corpus-not-ci-gated]] — the other unguarded fact about this repo's agent-records layer

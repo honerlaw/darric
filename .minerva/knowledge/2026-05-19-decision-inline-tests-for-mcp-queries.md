@@ -27,5 +27,6 @@ Tests for `mcp_server::service::queries` live inline in `queries.rs` under `#[cf
 - If the duplication of migration-loading becomes a maintenance burden, the right refactor is a `#[cfg(test)] pub(crate) fn test_db()` helper somewhere reachable from both inline and integration tests — not making `mcp_server` `pub`.
 
 ## Related
+
 - [[2026-05-19-decision-tool-handler-router-pattern]] — also decided by this repo's no-`#[allow]`-outside-tests policy
 - [[2026-05-19-decision-spawn-blocking-for-rusqlite-tools]] — covers the same sync query layer that the tool handlers offload

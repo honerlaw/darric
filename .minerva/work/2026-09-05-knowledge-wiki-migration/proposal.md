@@ -50,11 +50,11 @@ landing date `knowledge_rename.landing_date` derives from git (oldest commit tou
 path, following renames). Several entries sharing a date is normal: identity is the whole
 stem, not the date.
 
-| From | To |
-| --- | --- |
-| `001-rmcp-as-mcp-sdk.md` | `2026-05-19-decision-rmcp-as-mcp-sdk.md` |
-| `002-tool-handler-router-pattern.md` | `2026-05-19-decision-tool-handler-router-pattern.md` |
-| `003-inline-tests-for-mcp-queries.md` | `2026-05-19-decision-inline-tests-for-mcp-queries.md` |
+| From                                       | To                                                         |
+| ------------------------------------------ | ---------------------------------------------------------- |
+| `001-rmcp-as-mcp-sdk.md`                   | `2026-05-19-decision-rmcp-as-mcp-sdk.md`                   |
+| `002-tool-handler-router-pattern.md`       | `2026-05-19-decision-tool-handler-router-pattern.md`       |
+| `003-inline-tests-for-mcp-queries.md`      | `2026-05-19-decision-inline-tests-for-mcp-queries.md`      |
 | `004-spawn-blocking-for-rusqlite-tools.md` | `2026-05-19-decision-spawn-blocking-for-rusqlite-tools.md` |
 
 The `decision-` type segment is inserted by hand. `knowledge_rename.py` cannot supply it:
@@ -76,7 +76,7 @@ body section (`## Context` / `## Decision` / `## Consequences`) byte-identical:
   never the initial edges.
 
 `**Date**: 2026-05-18` stays as authored in every body. The filename records when the
-entry *landed*; the body records when it was *written*. The one-day gap is correct and
+entry _landed_; the body records when it was _written_. The one-day gap is correct and
 must not be "fixed".
 
 ### 3. Author `index.md`
