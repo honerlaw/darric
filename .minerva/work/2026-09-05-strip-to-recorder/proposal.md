@@ -141,7 +141,21 @@ filters them out.
 
 ## Phases
 
-Three ordered phases, each independently shippable, each leaving the repository working.
+1. **Strip** — delete the AI, MCP, notes, tasks, tags, search and board subsystems; collapse the
+   UI to one screen driven by the existing mic-only capture; migration dropping the retired
+   tables. Done when the app builds, records from the default mic, transcribes, saves and lists
+   recordings, with no reference to any deleted subsystem.
+2. **Multi-input capture and device attribution** — capture every input device concurrently;
+   per-source segmenting, bounded worker pool, device-attribution schema; delete the MFCC
+   tracker; swap the Whisper model. Done when a recording captures every connected input device
+   at once, each line names its device, and unplugging one loses only that device.
+3. **Output capture via Core Audio taps** — the FFI, the own-device exclusion registry, and the
+   `NSAudioCaptureUsageDescription` permission swap. Done when a recording captures what the
+   machine is playing, attributed to the output device it played through.
+
+Each phase is independently shippable and leaves the repository working. Detail follows.
+
+## Phase detail
 
 ### 1. Strip
 
