@@ -4,10 +4,24 @@ import { formatElapsed, formatTime } from "../lib/utils";
 import type { CaptureDevice, Session, TranscriptLine } from "../types";
 import { DeviceRow } from "./DeviceRow";
 
-function emptyTranscriptMessage(isRecording: boolean, isStarting: boolean): string {
+function emptyTranscriptMessage(
+  isRecording: boolean,
+  isStarting: boolean,
+  isStopping: boolean,
+): string {
+  // Before `isRecording`, which stays true for the whole stop: a recording that
+  // has already ended must not still claim to be listening for speech.
+  if (isStopping) return "Finishing transcription…";
   if (isRecording) return "Listening — transcript will appear here as you speak…";
   if (isStarting) return "Starting…";
   return "No transcript for this recording.";
+}
+
+/** The line under the title: what this recording is doing right now. */
+function statusLine(isRecording: boolean, isStopping: boolean, elapsedSeconds: number): string {
+  if (isStopping) return `finishing — ${formatElapsed(elapsedSeconds)} recorded`;
+  if (isRecording) return `${formatElapsed(elapsedSeconds)} elapsed`;
+  return "stopped";
 }
 
 interface RecorderPaneProps {
@@ -19,6 +33,13 @@ interface RecorderPaneProps {
   droppedSegments: number;
   isRecording: boolean;
   isStarting: boolean;
+  /**
+   * A stop is in flight for *this* recording: capture has ended but the backend
+   * is still flushing and transcribing. Carries the same viewing-is-active gate
+   * as `isRecording`, so a past recording opened mid-stop is not labelled with
+   * the active one's state.
+   */
+  isStopping: boolean;
   /**
    * False while any recording is in flight (resuming a second one would be
    * rejected) and while the speech model is still downloading (resuming would
@@ -38,6 +59,7 @@ export function RecorderPane({
   droppedSegments,
   isRecording,
   isStarting,
+  isStopping,
   canResume,
   elapsedSeconds,
   onResume,
@@ -114,8 +136,7 @@ export function RecorderPane({
         )}
 
         <div className="mt-2 mb-4 font-mono text-[12px] text-ink-3">
-          started {startedStr} ·{" "}
-          {isRecording ? `${formatElapsed(elapsedSeconds)} elapsed` : "stopped"}
+          started {startedStr} · {statusLine(isRecording, isStopping, elapsedSeconds)}
         </div>
 
         <DeviceRow devices={devices} onToggle={onToggleDevice} />
@@ -132,7 +153,7 @@ export function RecorderPane({
 
         {transcriptLines.length === 0 ? (
           <p className="text-[14px] text-ink-4 italic">
-            {emptyTranscriptMessage(isRecording, isStarting)}
+            {emptyTranscriptMessage(isRecording, isStarting, isStopping)}
           </p>
         ) : (
           <div className="space-y-3">
@@ -153,7 +174,7 @@ export function RecorderPane({
                 </span>
                 <p className="font-sans text-[15px] leading-[1.6] text-ink-2">
                   {line.content}
-                  {i === transcriptLines.length - 1 && isRecording && (
+                  {i === transcriptLines.length - 1 && isRecording && !isStopping && (
                     <span className="caret-blink ml-[2px] text-accent">▍</span>
                   )}
                 </p>

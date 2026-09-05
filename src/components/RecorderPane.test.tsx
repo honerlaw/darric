@@ -22,6 +22,7 @@ const BASE_PROPS = {
   droppedSegments: 0,
   isRecording: false,
   isStarting: false,
+  isStopping: false,
   canResume: true,
   elapsedSeconds: 0,
   onResume: (): void => undefined,
@@ -65,5 +66,43 @@ describe("RecorderPane title editing", () => {
     await user.type(input, "renamed A{Enter}");
 
     expect(onRename).toHaveBeenCalledWith("renamed A");
+  });
+});
+
+describe("RecorderPane stopping state", () => {
+  it("reports the recording as finishing rather than still listening", () => {
+    // `isRecording` stays true across the stop, so without the `isStopping`
+    // check the pane keeps inviting speech into a recording that has ended.
+    render(
+      <RecorderPane
+        {...BASE_PROPS}
+        session={makeSession("a", "Standup")}
+        onRename={(): void => undefined}
+        isRecording
+        isStopping
+        elapsedSeconds={65}
+      />,
+    );
+
+    expect(screen.getByText(/Finishing transcription…/)).toBeInTheDocument();
+    expect(screen.queryByText(/Listening/)).toBeNull();
+    expect(screen.getByText(/finishing — 01:05 recorded/)).toBeInTheDocument();
+  });
+
+  it("still invites speech while the recording is genuinely live", () => {
+    // The positive control: without it the assertion above would pass for a pane
+    // that had simply stopped rendering the listening message at all.
+    render(
+      <RecorderPane
+        {...BASE_PROPS}
+        session={makeSession("a", "Standup")}
+        onRename={(): void => undefined}
+        isRecording
+        elapsedSeconds={65}
+      />,
+    );
+
+    expect(screen.getByText(/Listening/)).toBeInTheDocument();
+    expect(screen.getByText(/01:05 elapsed/)).toBeInTheDocument();
   });
 });

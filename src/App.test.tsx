@@ -148,3 +148,79 @@ describe("App model download visibility", () => {
     });
   });
 });
+
+const LIVE_SESSION = {
+  id: "live",
+  topic: "Standup",
+  started_at: "2024-01-01T09:00:00Z",
+  ended_at: null,
+  created_at: "2024-01-01T09:00:00Z",
+  recorded_minutes: 0,
+};
+
+/**
+ * Mock a backend whose `stop_session` hangs until the returned release is
+ * called — the real one spends several seconds joining capture threads,
+ * flushing segmenters and draining the whisper queue.
+ */
+function mockPendingStop(): { release: () => void; stopCalls: () => number } {
+  let release = (): void => undefined;
+  const pending = new Promise<void>((resolve) => {
+    release = (): void => {
+      resolve();
+    };
+  });
+  let stopCalls = 0;
+  mockCommands({
+    model_download_state: () => null,
+    list_sessions: () => [LIVE_SESSION],
+    list_capture_devices: () => [],
+    capture_drop_count: () => 0,
+    get_session_transcript: () => [],
+    start_session: () => "live",
+    stop_session: async () => {
+      stopCalls += 1;
+      await pending;
+    },
+  });
+  return { release, stopCalls: () => stopCalls };
+}
+
+describe("App stop feedback", () => {
+  it("reports the stop from the click until the backend finishes", async () => {
+    // `App` is the only consumer of Header and RecorderPane, so a prop wired to
+    // the wrong expression there is invisible to either component's own tests.
+    // This drives the composed tree.
+    const { release, stopCalls } = mockPendingStop();
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Record/ }));
+    const button = await screen.findByRole("button", { name: /Stop$/ });
+    expect(await screen.findByText(/Listening/)).toBeInTheDocument();
+
+    fireEvent.click(button);
+
+    // The whole point: this holds while `stop_session` is still running.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Stopping…/ })).toBeDisabled();
+    });
+    expect(screen.getByText(/finishing ·/)).toBeInTheDocument();
+    expect(screen.getByText(/Finishing transcription…/)).toBeInTheDocument();
+    expect(screen.queryByText(/Listening/)).toBeNull();
+
+    // A second press cannot reach the backend. `stop_session` takes the engine
+    // on entry, so a re-invocation returns NoSession into the error bar.
+    fireEvent.click(screen.getByRole("button", { name: /Stopping…/ }));
+    expect(stopCalls()).toBe(1);
+
+    release();
+
+    // `waitFor` re-renders inside act, so the released command's continuations
+    // land before these assertions run.
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Record/ })).toBeEnabled();
+    });
+    expect(screen.getByText(/No transcript for this recording/)).toBeInTheDocument();
+    expect(screen.queryByText(/finishing ·/)).toBeNull();
+  });
+});

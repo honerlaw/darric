@@ -28,6 +28,7 @@ interface UseSessionReturn {
   setActiveSessionId: Dispatch<SetStateAction<string | null>>;
   isRecording: boolean;
   isStarting: boolean;
+  isStopping: boolean;
   modelReady: boolean;
   downloadProgress: number | null;
   elapsedSeconds: number;
@@ -45,11 +46,16 @@ export function useSession(): UseSessionReturn {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [modelReady, setModelReady] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Read by `stop` to reject a re-entrant call. A ref rather than the state
+  // above because the guard has to see the value set by the call in flight,
+  // not the one captured when this `stop` closure was created.
+  const stoppingRef = useRef(false);
 
   const refresh = useCallback(async (): Promise<void> => {
     const list = await listSessions();
@@ -138,16 +144,31 @@ export function useSession(): UseSessionReturn {
   );
 
   const stop = useCallback(async (): Promise<void> => {
+    // `stop_session` takes the engine out of app state on entry, so a second
+    // concurrent call finds none and fails with NoSession. Guarding here rather
+    // than relying on the Stop button's `disabled` keeps that invariant with the
+    // hook that owns it, instead of with whichever control happens to call it.
+    if (stoppingRef.current) return;
+    // Everything after the guard runs inside the `try`, so the `finally` below
+    // is the single reset path — the flag cannot wedge true on a throw.
     try {
+      stoppingRef.current = true;
+      setIsStopping(true);
+      // Capture has already ended by the time the command returns — the seconds
+      // it spends there are flush and transcription. Freezing the clock on the
+      // click is both the earliest feedback available and the honest elapsed
+      // number.
+      if (timerRef.current !== null) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
       await stopSession();
     } catch (e) {
       setError(String(e));
     } finally {
       setIsRecording(false);
-      if (timerRef.current !== null) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
+      setIsStopping(false);
+      stoppingRef.current = false;
       await refresh();
     }
   }, [refresh]);
@@ -197,6 +218,7 @@ export function useSession(): UseSessionReturn {
     setActiveSessionId,
     isRecording,
     isStarting,
+    isStopping,
     modelReady,
     downloadProgress,
     elapsedSeconds,

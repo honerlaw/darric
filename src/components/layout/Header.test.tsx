@@ -5,6 +5,7 @@ import { Header } from "./Header";
 const BASE_PROPS = {
   isRecording: false,
   isStarting: false,
+  isStopping: false,
   downloadProgress: null,
   elapsedSeconds: 0,
   onRecord: (): void => undefined,
@@ -42,6 +43,21 @@ describe("Header record button", () => {
 
     expect(screen.getByRole("button")).toHaveTextContent("Starting…");
     expect(screen.getByRole("button")).toBeDisabled();
+  });
+
+  it("reports a stop in flight instead of leaving the button on Stop", () => {
+    // The recording stays live for the whole flush, so `isStopping` has to win
+    // the tie with `isRecording` — otherwise the several seconds the backend
+    // spends draining the whisper queue look like a click that did nothing.
+    render(<Header {...BASE_PROPS} isRecording isStopping elapsedSeconds={65} />);
+
+    const button = screen.getByRole("button");
+    expect(button).toHaveTextContent("Stopping…");
+    // Disabled is what makes a second click impossible: `stop_session` takes the
+    // engine on entry, so a re-invocation fails with NoSession.
+    expect(button).toBeDisabled();
+    expect(screen.getByText(/finishing · 01:05/)).toBeInTheDocument();
+    expect(screen.queryByText(/recording ·/)).toBeNull();
   });
 
   it("never disables Stop, even while a download is still streaming", () => {

@@ -20,6 +20,7 @@ export default function App(): React.JSX.Element {
     activeSessionId,
     isRecording,
     isStarting,
+    isStopping,
     downloadProgress,
     elapsedSeconds,
     error,
@@ -106,6 +107,7 @@ export default function App(): React.JSX.Element {
       <Header
         isRecording={isRecording}
         isStarting={isStarting}
+        isStopping={isStopping}
         downloadProgress={downloadProgress}
         elapsedSeconds={elapsedSeconds}
         onRecord={handleRecord}
@@ -134,6 +136,7 @@ export default function App(): React.JSX.Element {
           droppedSegments={droppedSegments}
           isRecording={isRecording && viewingSessionId === activeSessionId}
           isStarting={isStarting}
+          isStopping={isStopping && viewingSessionId === activeSessionId}
           elapsedSeconds={elapsedSeconds}
           canResume={!isRecording && downloadProgress === null}
           onResume={handleResume}
