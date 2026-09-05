@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { emit } from "@tauri-apps/api/event";
 import { useTranscript } from "./useTranscript";
 import { mockCommands } from "../test/tauri-helpers";
+import type { InvokeArgs } from "@tauri-apps/api/core";
 
 function chunk(sessionId: string, content: string): Record<string, string> {
   return {
@@ -31,7 +32,26 @@ describe("useTranscript session scoping", () => {
     // listener outlives the recording by FLUSH_LINGER_MS. A chunk arriving in
     // that window belongs to the session that stopped — not to whatever is on
     // screen by the time it lands.
-    mockCommands({ get_session_transcript: () => [] });
+    // The backend persists a line before it emits it, so A's flush line exists in
+    // the database from the moment it is broadcast. Reselecting A must show it —
+    // withholding it from B's pane loses nothing.
+    let flushed = false;
+    mockCommands({
+      get_session_transcript: (payload?: InvokeArgs) =>
+        flushed && (payload as { sessionId: string } | undefined)?.sessionId === "A"
+          ? [
+              {
+                id: "persisted",
+                session_id: "A",
+                device_id: "d1",
+                device_name: "MacBook Microphone",
+                direction: "input",
+                content: "A's trailing flush line",
+                recorded_at: "2024-01-01T09:00:05Z",
+              },
+            ]
+          : [],
+    });
     const { result, rerender } = renderHook(
       ({ id, live }: { id: string; live: boolean }) => useTranscript(id, live),
       { initialProps: { id: "A", live: true } },
@@ -52,11 +72,20 @@ describe("useTranscript session scoping", () => {
     });
     await listenersReady();
 
+    flushed = true;
     await act(async () => {
       await emit("transcript_chunk", chunk("A", "A's trailing flush line"));
     });
 
     expect(result.current).toHaveLength(0);
+
+    // Reselecting A shows the line the filter withheld from B — it was persisted
+    // before it was emitted, so nothing was lost by not displaying it there.
+    rerender({ id: "A", live: false });
+    await waitFor(() => {
+      expect(result.current).toHaveLength(1);
+    });
+    expect(result.current[0]?.content).toBe("A's trailing flush line");
   });
 
   it("still appends a late flush line for the session being displayed", async () => {
