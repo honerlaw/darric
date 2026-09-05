@@ -57,6 +57,7 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libssl-dev \
+            libasound2-dev \
             cmake
 
       - uses: dtolnay/rust-toolchain@stable
@@ -99,6 +100,7 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             libssl-dev \
+            libasound2-dev \
             cmake
 
       - uses: dtolnay/rust-toolchain@stable
@@ -108,3 +110,25 @@ jobs:
           workspaces: src-tauri
 
       - run: cargo test --manifest-path src-tauri/Cargo.toml
+
+  knowledge:
+    name: Knowledge Wiki
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out minerva tooling
+        uses: actions/checkout@v4
+        with:
+          repository: honerlaw/agent-marketplace
+          path: .minerva-tools
+          ref: main
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # Deterministic, read-only. Fails on index drift, broken [[...]] wikilinks
+      # and missing reciprocals -- the defects that otherwise merge green.
+      - name: Knowledge-wiki drift gate
+        run: python .minerva-tools/plugins/minerva/scripts/knowledge_lint.py .minerva/knowledge
