@@ -19,6 +19,13 @@ function recordLabel(
   return "Record";
 }
 
+/** What a screen reader hears when the recording phase changes. */
+function phaseAnnouncement(isRecording: boolean, isStopping: boolean): string {
+  if (isStopping) return "Stopping — finishing transcription";
+  if (isRecording) return "Recording";
+  return "";
+}
+
 interface HeaderProps {
   isRecording: boolean;
   isStarting: boolean;
@@ -44,11 +51,13 @@ export function Header({
   onRecord,
   onStop,
 }: HeaderProps): React.JSX.Element {
-  // Disabled in exactly two cases: a start that cannot proceed, and a stop that
-  // is already under way. Never while a recording is live and stoppable — this is
-  // one button serving both roles, and disabling it on an unrelated download
-  // would strand the user unable to stop an active recording.
-  const disabled = isStopping || (!isRecording && (isStarting || downloadProgress !== null));
+  // A start that cannot proceed uses the native `disabled`: nothing was in
+  // progress on the button and there is no interaction to preserve. A stop in
+  // flight does not — the user has just pressed this button, and `disabled`
+  // moves their focus to the body mid-interaction while announcing nothing.
+  // `aria-disabled` keeps focus, and `useSession.stop` rejects the re-entrant
+  // call, so the click it still delivers is inert.
+  const cannotStart = !isRecording && (isStarting || downloadProgress !== null);
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 px-6" data-tauri-drag-region="true">
@@ -70,11 +79,20 @@ export function Header({
         </div>
       )}
 
+      {/* The button's own label change is not announced, and the elapsed time in
+          the indicator above re-renders every second — a live region on that
+          would narrate the clock. This carries the phase alone, so it speaks
+          once per transition. */}
+      <span role="status" aria-live="polite" className="sr-only">
+        {phaseAnnouncement(isRecording, isStopping)}
+      </span>
+
       <button
         type="button"
         onClick={isRecording ? onStop : onRecord}
-        disabled={disabled}
-        className="flex h-[30px] cursor-pointer items-center gap-[6px] rounded-full border border-line bg-paper px-[14px] text-[13px] text-ink transition-colors hover:border-line-strong hover:bg-paper-sunken disabled:cursor-default disabled:opacity-40"
+        disabled={cannotStart}
+        aria-disabled={isStopping}
+        className="flex h-[30px] cursor-pointer items-center gap-[6px] rounded-full border border-line bg-paper px-[14px] text-[13px] text-ink transition-colors hover:border-line-strong hover:bg-paper-sunken disabled:cursor-default disabled:opacity-40 aria-disabled:cursor-default aria-disabled:opacity-40"
       >
         <span
           className={`h-[7px] w-[7px] rounded-full bg-accent ${

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RecorderPane } from "./RecorderPane";
-import type { Session } from "../types";
+import type { Session, TranscriptLine } from "../types";
 
 function makeSession(id: string, topic: string): Session {
   return {
@@ -69,7 +69,46 @@ describe("RecorderPane title editing", () => {
   });
 });
 
+const LINE: TranscriptLine = {
+  id: "l1",
+  session_id: "a",
+  device_id: "d1",
+  device_name: "MacBook Microphone",
+  direction: "input",
+  content: "hello there",
+  recorded_at: "2024-01-01T09:00:05Z",
+};
+
 describe("RecorderPane stopping state", () => {
+  it("stops blinking the caret once the recording is finishing", () => {
+    // Only reachable with a non-empty transcript — the normal case, and the one
+    // every other test in this file misses by rendering with no lines.
+    const { rerender } = render(
+      <RecorderPane
+        {...BASE_PROPS}
+        session={makeSession("a", "Standup")}
+        onRename={(): void => undefined}
+        transcriptLines={[LINE]}
+        isRecording
+      />,
+    );
+    expect(screen.getByText("▍")).toBeInTheDocument();
+
+    rerender(
+      <RecorderPane
+        {...BASE_PROPS}
+        session={makeSession("a", "Standup")}
+        onRename={(): void => undefined}
+        transcriptLines={[LINE]}
+        isRecording
+        isStopping
+      />,
+    );
+
+    expect(screen.queryByText("▍")).toBeNull();
+    expect(screen.getByText("hello there")).toBeInTheDocument();
+  });
+
   it("reports the recording as finishing rather than still listening", () => {
     // `isRecording` stays true across the stop, so without the `isStopping`
     // check the pane keeps inviting speech into a recording that has ended.

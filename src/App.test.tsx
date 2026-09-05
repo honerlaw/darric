@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { emit } from "@tauri-apps/api/event";
 import App from "./App";
@@ -163,6 +163,15 @@ const LIVE_SESSION = {
  * called — the real one spends several seconds joining capture threads,
  * flushing segmenters and draining the whisper queue.
  */
+const PAST_SESSION = {
+  id: "past",
+  topic: "Retro",
+  started_at: "2024-01-01T08:00:00Z",
+  ended_at: "2024-01-01T08:30:00Z",
+  created_at: "2024-01-01T08:00:00Z",
+  recorded_minutes: 30,
+};
+
 function mockPendingStop(): { release: () => void; stopCalls: () => number } {
   let release = (): void => undefined;
   const pending = new Promise<void>((resolve) => {
@@ -173,7 +182,7 @@ function mockPendingStop(): { release: () => void; stopCalls: () => number } {
   let stopCalls = 0;
   mockCommands({
     model_download_state: () => null,
-    list_sessions: () => [LIVE_SESSION],
+    list_sessions: () => [LIVE_SESSION, PAST_SESSION],
     list_capture_devices: () => [],
     capture_drop_count: () => 0,
     get_session_transcript: () => [],
@@ -187,6 +196,12 @@ function mockPendingStop(): { release: () => void; stopCalls: () => number } {
 }
 
 describe("App stop feedback", () => {
+  afterEach(() => {
+    // A test that fails before its own restore would otherwise leak fake timers
+    // into every test after it.
+    vi.useRealTimers();
+  });
+
   it("reports the stop from the click until the backend finishes", async () => {
     // `App` is the only consumer of Header and RecorderPane, so a prop wired to
     // the wrong expression there is invisible to either component's own tests.
@@ -202,14 +217,19 @@ describe("App stop feedback", () => {
 
     // The whole point: this holds while `stop_session` is still running.
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: /Stopping…/ })).toBeDisabled();
+      expect(screen.getByRole("button", { name: /Stopping…/ })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
     });
     expect(screen.getByText(/finishing ·/)).toBeInTheDocument();
     expect(screen.getByText(/Finishing transcription…/)).toBeInTheDocument();
     expect(screen.queryByText(/Listening/)).toBeNull();
 
-    // A second press cannot reach the backend. `stop_session` takes the engine
-    // on entry, so a re-invocation returns NoSession into the error bar.
+    // A second press cannot reach the backend. The button keeps focus and still
+    // delivers the click, so this genuinely exercises `useSession.stop`'s
+    // re-entrancy guard: `stop_session` takes the engine on entry, and a second
+    // invocation would return NoSession into the error bar.
     fireEvent.click(screen.getByRole("button", { name: /Stopping…/ }));
     expect(stopCalls()).toBe(1);
 
@@ -222,5 +242,85 @@ describe("App stop feedback", () => {
     });
     expect(screen.getByText(/No transcript for this recording/)).toBeInTheDocument();
     expect(screen.queryByText(/finishing ·/)).toBeNull();
+  });
+
+  it("keeps the dropped-segment warning when the stop clears the backend count", async () => {
+    // `capture_drop_count` reads the engine, and `stop_session` takes it on
+    // entry — so a poll landing during the stop reports 0 and would erase the
+    // warning. The effect is gated on `isStopping` precisely to stop polling at
+    // the click; this is the only chance the user has to read it.
+    vi.useFakeTimers();
+    let stopped = false;
+    let release = (): void => undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = (): void => {
+        resolve();
+      };
+    });
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [LIVE_SESSION],
+      list_capture_devices: () => [],
+      get_session_transcript: () => [],
+      start_session: () => "live",
+      capture_drop_count: () => (stopped ? 0 : 12),
+      stop_session: async () => {
+        stopped = true;
+        await pending;
+      },
+    });
+    render(<App />);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Record/ }));
+    // The poll's interval is only registered once `start_session` resolves and
+    // `isRecording` flips, so let that settle before advancing onto a tick.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    expect(screen.getByText(/Transcription fell behind/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Stop$/ }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6000);
+    });
+
+    expect(screen.getByText(/Transcription fell behind/)).toBeInTheDocument();
+
+    await act(async () => {
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(screen.getByText(/Transcription fell behind/)).toBeInTheDocument();
+  });
+
+  it("does not label a past recording with the stopping one's state", async () => {
+    // The pane's props carry a viewing-is-active gate for exactly this: clicking
+    // away mid-stop must show that recording's own state, not the active one's.
+    // Without the gate a finished recording reads "finishing — 00:00 recorded".
+    const { release } = mockPendingStop();
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Record/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Stop$/ }));
+    await screen.findByText(/Finishing transcription…/);
+
+    fireEvent.click(screen.getByText("Retro"));
+
+    await screen.findByText(/No transcript for this recording/);
+    expect(screen.queryByText(/Finishing transcription…/)).toBeNull();
+    expect(screen.queryByText(/finishing — /)).toBeNull();
+    // The chrome still reports the stop — it is app-scoped, not pane-scoped.
+    expect(screen.getByText(/finishing ·/)).toBeInTheDocument();
+
+    release();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Record/ })).toBeEnabled();
+    });
   });
 });

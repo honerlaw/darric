@@ -53,11 +53,39 @@ describe("Header record button", () => {
 
     const button = screen.getByRole("button");
     expect(button).toHaveTextContent("Stopping…");
-    // Disabled is what makes a second click impossible: `stop_session` takes the
-    // engine on entry, so a re-invocation fails with NoSession.
-    expect(button).toBeDisabled();
+    // Marked unavailable without taking focus away — `useSession.stop` is what
+    // actually rejects the re-entrant call.
+    expect(button).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByText(/finishing · 01:05/)).toBeInTheDocument();
     expect(screen.queryByText(/recording ·/)).toBeNull();
+  });
+
+  it("stops every pulse while the stop is in flight", () => {
+    // The pulsing red dot is the strongest "still recording" affordance in the
+    // chrome. Leaving it running restores most of the original complaint even
+    // with the label corrected.
+    const { container } = render(<Header {...BASE_PROPS} isRecording isStopping />);
+
+    expect(container.querySelectorAll(".pulse-dot")).toHaveLength(0);
+  });
+
+  it("pulses while the recording is genuinely live", () => {
+    // The positive control for the assertion above.
+    const { container } = render(<Header {...BASE_PROPS} isRecording />);
+
+    expect(container.querySelectorAll(".pulse-dot").length).toBeGreaterThan(0);
+  });
+
+  it("keeps focus on the button it disables mid-interaction", () => {
+    // The user has just pressed this button. A native `disabled` would move
+    // their focus to the body and announce nothing — the original confusion,
+    // relocated to assistive tech.
+    render(<Header {...BASE_PROPS} isRecording isStopping />);
+
+    const button = screen.getByRole("button");
+    expect(button).toBeEnabled();
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("status")).toHaveTextContent("Stopping — finishing transcription");
   });
 
   it("never disables Stop, even while a download is still streaming", () => {

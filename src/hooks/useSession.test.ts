@@ -54,6 +54,28 @@ describe("useSession stop", () => {
     expect(result.current.isStopping).toBe(false);
   });
 
+  it("stops a second recording after the first one finished stopping", async () => {
+    // The re-entrancy guard is a ref, so a missed reset is invisible until the
+    // *next* stop: it early-returns forever and the Stop button silently does
+    // nothing for the rest of the app's life, with no error anywhere.
+    const { release, calls } = pendingStop();
+    const { result } = renderHook(() => useSession());
+
+    for (const round of [1, 2]) {
+      await act(async () => {
+        await result.current.start();
+      });
+      await act(async () => {
+        const stopping = result.current.stop();
+        release();
+        await stopping;
+      });
+      expect(calls()).toBe(round);
+    }
+
+    expect(result.current.isRecording).toBe(false);
+  });
+
   it("clears the stopping state when the backend fails", async () => {
     // Without clearing on the failure path the button stays a disabled
     // "Stopping…" for the rest of the session, with no way to stop or record.
