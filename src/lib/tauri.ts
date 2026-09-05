@@ -63,3 +63,10 @@ export const onModelReady = async (handler: () => void): Promise<UnlistenFn> =>
   listen("model_ready", () => {
     handler();
   });
+
+export const onModelDownloadError = async (
+  handler: (message: string) => void,
+): Promise<UnlistenFn> =>
+  listen<string>("model_download_error", (e) => {
+    handler(e.payload);
+  });

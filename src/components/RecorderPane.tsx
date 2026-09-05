@@ -22,7 +22,6 @@ interface RecorderPaneProps {
   /** False while any recording is in flight — resuming a second one would be rejected. */
   canResume: boolean;
   elapsedSeconds: number;
-  downloadProgress: number | null;
   onResume: () => void;
   onRename: (topic: string) => void;
 }
@@ -37,7 +36,6 @@ export function RecorderPane({
   isStarting,
   canResume,
   elapsedSeconds,
-  downloadProgress,
   onResume,
   onRename,
 }: RecorderPaneProps): React.JSX.Element {
@@ -120,20 +118,6 @@ export function RecorderPane({
       </div>
 
       <div className="flex-1 overflow-y-auto border-t border-line px-10 py-5">
-        {downloadProgress !== null && (
-          <div className="mb-5 flex flex-col gap-2">
-            <p className="text-[13px] text-ink-3">
-              Downloading speech model ({String(downloadProgress)}%)…
-            </p>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-paper-sunken">
-              <div
-                className="h-full rounded-full bg-accent transition-all duration-300"
-                style={{ width: `${String(downloadProgress)}%` }}
-              />
-            </div>
-          </div>
-        )}
-
         {droppedSegments > 0 && (
           <p className="mb-4 font-mono text-[11px] text-danger">
             Transcription fell behind — {String(droppedSegments)} segment

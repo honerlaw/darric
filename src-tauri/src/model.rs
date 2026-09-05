@@ -1,6 +1,6 @@
 use crate::error::{AppError, Result};
 use futures_util::StreamExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter};
 use tokio::io::AsyncWriteExt;
 
@@ -28,6 +28,26 @@ pub async fn ensure_model(app: &AppHandle) -> Result<PathBuf> {
     log::info!("[model] not found — downloading {MODEL_FILENAME}");
     app.emit("model_download_start", ()).ok();
 
+    match download(app, &path).await {
+        Ok(()) => {
+            log::info!("[model] download complete → {}", path.display());
+            app.emit("model_download_done", ()).ok();
+            Ok(path)
+        }
+        Err(e) => {
+            // `model_download_start` has no terminal counterpart on the failure
+            // path without this. The UI would leave its progress indicator
+            // pinned at the last reported percentage and the Record button
+            // disabled for the rest of the session, because nothing ever tells
+            // it the download stopped.
+            log::error!("[model] download failed: {e}");
+            app.emit("model_download_error", e.to_string()).ok();
+            Err(e)
+        }
+    }
+}
+
+async fn download(app: &AppHandle, path: &Path) -> Result<()> {
     let response = reqwest::get(MODEL_URL)
         .await
         .map_err(|e| AppError::Audio(format!("model download request failed: {e}")))?;
@@ -72,10 +92,7 @@ pub async fn ensure_model(app: &AppHandle) -> Result<PathBuf> {
 
     file.flush().await?;
     drop(file);
-    tokio::fs::rename(&tmp_path, &path).await?;
+    tokio::fs::rename(&tmp_path, path).await?;
 
-    log::info!("[model] download complete → {}", path.display());
-    app.emit("model_download_done", ()).ok();
-
-    Ok(path)
+    Ok(())
 }

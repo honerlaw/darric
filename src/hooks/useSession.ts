@@ -10,6 +10,7 @@ import {
   deleteSession,
   listSessions,
   onModelDownloadDone,
+  onModelDownloadError,
   onModelDownloadProgress,
   onModelDownloadStart,
   onModelReady,
@@ -68,6 +69,13 @@ export function useSession(): UseSessionReturn {
     const unDone = onModelDownloadDone(() => {
       setDownloadProgress(null);
     });
+    // Clearing the progress is the point, not the message: without a terminal
+    // event on the failure path the indicator stays pinned at its last
+    // percentage and the Record button stays disabled for the whole session.
+    const unError = onModelDownloadError((message) => {
+      setDownloadProgress(null);
+      setError(`Speech model download failed: ${message}`);
+    });
     const unReady = onModelReady(() => {
       setModelReady(true);
     });
@@ -79,6 +87,9 @@ export function useSession(): UseSessionReturn {
         fn();
       });
       void unDone.then((fn) => {
+        fn();
+      });
+      void unError.then((fn) => {
         fn();
       });
       void unReady.then((fn) => {

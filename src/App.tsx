@@ -1,6 +1,7 @@
 import type React from "react";
 import { useEffect, useState } from "react";
 import { Header } from "./components/layout/Header";
+import { ModelDownloadBanner } from "./components/ModelDownloadBanner";
 import { RecorderPane } from "./components/RecorderPane";
 import { RecordingList } from "./components/RecordingList";
 import { useDevices } from "./hooks/useDevices";
@@ -105,12 +106,15 @@ export default function App(): React.JSX.Element {
       <Header
         isRecording={isRecording}
         isStarting={isStarting}
+        downloadProgress={downloadProgress}
         elapsedSeconds={elapsedSeconds}
         onRecord={handleRecord}
         onStop={handleStop}
       />
 
       <div className="border-t border-line" />
+
+      <ModelDownloadBanner progress={downloadProgress} />
 
       <div className="flex flex-1 overflow-hidden">
         <RecordingList
@@ -131,8 +135,7 @@ export default function App(): React.JSX.Element {
           isRecording={isRecording && viewingSessionId === activeSessionId}
           isStarting={isStarting}
           elapsedSeconds={elapsedSeconds}
-          canResume={!isRecording}
-          downloadProgress={downloadProgress}
+          canResume={!isRecording && downloadProgress === null}
           onResume={handleResume}
           onRename={handleRename}
         />
