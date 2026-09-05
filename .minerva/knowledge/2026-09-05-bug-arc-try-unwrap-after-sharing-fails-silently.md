@@ -55,3 +55,7 @@ other holder. The type now makes the mistake unexpressible.
 ## Related
 
 - [[2026-09-05-pattern-verifying-a-sequence-says-nothing-about-whether-it-runs]] — how this survived a completion check that looked directly at the affected function
+- [[2026-09-05-bug-a-losing-rename-became-a-silent-none-transcriber]] — see also
+- [[2026-09-05-bug-concurrent-model-downloads-share-one-tmp-file]] — see also
+- [[2026-09-05-bug-the-session-start-guard-is-check-then-act]] — see also
+- [[2026-09-05-decision-capture-engine-requires-a-transcriber]] — see also

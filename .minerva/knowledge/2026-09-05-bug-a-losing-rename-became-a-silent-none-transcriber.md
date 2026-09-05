@@ -63,3 +63,4 @@ swallowed it. Same `Err`, two dispositions, and only the silent one was user-fac
 - [[2026-09-05-bug-arc-try-unwrap-after-sharing-fails-silently]] — the previous instance of a silent `None` disabling transcription in this exact position
 - [[2026-09-05-pattern-verifying-a-sequence-says-nothing-about-whether-it-runs]] — why the `if let Some(pool)` guard survived an earlier review
 - [[2026-09-05-decision-capture-engine-requires-a-transcriber]] — the change that makes this shape unexpressible
+- [[2026-09-05-bug-the-session-start-guard-is-check-then-act]] — see also

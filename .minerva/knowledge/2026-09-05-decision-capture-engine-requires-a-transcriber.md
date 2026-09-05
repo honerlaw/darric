@@ -52,3 +52,4 @@ reviewer verified the flush ordering _inside_ a block that never ran.
 - [[2026-09-05-bug-a-losing-rename-became-a-silent-none-transcriber]] — the report that forced this
 - [[2026-09-05-bug-arc-try-unwrap-after-sharing-fails-silently]] — the earlier bug through the same `Option`
 - [[2026-09-05-pattern-verifying-a-sequence-says-nothing-about-whether-it-runs]] — the review failure the removed guard enabled
+- [[2026-09-05-bug-the-session-start-guard-is-check-then-act]] — see also

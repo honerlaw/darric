@@ -57,3 +57,5 @@ finished rather than starting its own.
 
 - [[2026-09-05-constraint-tauri-events-from-setup-reach-no-webview]] — why the UI guard originally proposed as the fix could not be armed in time
 - [[2026-09-05-bug-arc-try-unwrap-after-sharing-fails-silently]] — another failure in this codebase that produced a plausible result instead of an error
+- [[2026-09-05-bug-a-losing-rename-became-a-silent-none-transcriber]] — see also
+- [[2026-09-05-reference-model-rs-download-paths-have-no-tests]] — see also
