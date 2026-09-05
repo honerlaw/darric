@@ -38,8 +38,16 @@ interface HeaderProps {
   /** Percentage of the speech model downloaded, or null when no download is in flight. */
   downloadProgress: number | null;
   elapsedSeconds: number;
+  /**
+   * A stopped recording is selected and a resume could actually start right now:
+   * nothing is recording, no start is already in flight, and the speech model is
+   * not downloading. False hides the button rather than disabling it — there is
+   * nothing for it to act on when no recording is selected.
+   */
+  canResume: boolean;
   onRecord: () => void;
   onStop: () => void;
+  onResume: () => void;
 }
 
 export function Header({
@@ -48,8 +56,10 @@ export function Header({
   isStopping,
   downloadProgress,
   elapsedSeconds,
+  canResume,
   onRecord,
   onStop,
+  onResume,
 }: HeaderProps): React.JSX.Element {
   // A start that cannot proceed uses the native `disabled`: nothing was in
   // progress on the button and there is no interaction to preserve. A stop in
@@ -86,6 +96,19 @@ export function Header({
       <span role="status" aria-live="polite" className="sr-only">
         {phaseAnnouncement(isRecording, isStopping)}
       </span>
+
+      {canResume && (
+        // Sits beside Record because it is the same action against an existing
+        // recording: both ways to begin capturing are in one place.
+        <button
+          type="button"
+          onClick={onResume}
+          aria-label="Resume recording"
+          className="flex h-[30px] cursor-pointer items-center rounded-full border border-line bg-paper px-[14px] text-[13px] text-ink transition-colors hover:border-line-strong hover:bg-paper-sunken"
+        >
+          Resume
+        </button>
+      )}
 
       <button
         type="button"

@@ -1,6 +1,33 @@
 import type React from "react";
+import { useState } from "react";
 import { groupSessionsByDate } from "../lib/utils";
 import type { Session } from "../types";
+import { ConfirmDialog } from "./ConfirmDialog";
+
+function sessionLabel(session: Session): string {
+  return session.topic !== null && session.topic.length > 0 ? session.topic : "Untitled recording";
+}
+
+/** The row's delete affordance. A can, not an `×` — the action destroys the recording. */
+function TrashIcon(): React.JSX.Element {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 16 16"
+      className="h-[14px] w-[14px]"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2.5 4h11" />
+      <path d="M6.5 4V2.8h3V4" />
+      <path d="M4 4l.6 8.4a1 1 0 0 0 1 .9h4.8a1 1 0 0 0 1-.9L12 4" />
+      <path d="M6.7 6.5v4.4M9.3 6.5v4.4" />
+    </svg>
+  );
+}
 
 interface RecordingListProps {
   sessions: Session[];
@@ -18,6 +45,12 @@ export function RecordingList({
   onDelete,
 }: RecordingListProps): React.JSX.Element {
   const groups = groupSessionsByDate(sessions);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+
+  // Resolved from the live list rather than stored alongside the id: a session
+  // deleted from elsewhere while the dialog is open must close it, not leave a
+  // prompt naming a recording that no longer exists.
+  const pendingDelete = sessions.find((s) => s.id === pendingDeleteId) ?? null;
 
   return (
     <aside className="flex w-[260px] shrink-0 flex-col overflow-y-auto border-r border-line">
@@ -48,7 +81,7 @@ export function RecordingList({
                 }}
                 className="flex-1 cursor-pointer truncate text-left text-[13px] text-ink"
               >
-                {s.topic !== null && s.topic.length > 0 ? s.topic : "Untitled recording"}
+                {sessionLabel(s)}
                 <span className="ml-2 font-mono text-[11px] text-ink-4">{s.recorded_minutes}m</span>
                 {s.id === activeId && (
                   <span className="pulse-dot ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-danger align-middle" />
@@ -57,17 +90,32 @@ export function RecordingList({
               <button
                 type="button"
                 onClick={() => {
-                  onDelete(s.id);
+                  setPendingDeleteId(s.id);
                 }}
                 aria-label={`Delete ${s.topic ?? "recording"}`}
-                className="cursor-pointer text-[13px] text-ink-4 opacity-0 transition-opacity group-hover:opacity-100 hover:text-danger"
+                className="cursor-pointer text-ink-4 opacity-0 transition-opacity group-hover:opacity-100 hover:text-danger"
               >
-                ×
+                <TrashIcon />
               </button>
             </div>
           ))}
         </div>
       ))}
+
+      {pendingDelete !== null && (
+        <ConfirmDialog
+          title={`Delete “${sessionLabel(pendingDelete)}”?`}
+          body="This removes the recording and its transcript. It cannot be undone."
+          confirmLabel="Delete"
+          onConfirm={() => {
+            onDelete(pendingDelete.id);
+            setPendingDeleteId(null);
+          }}
+          onCancel={() => {
+            setPendingDeleteId(null);
+          }}
+        />
+      )}
     </aside>
   );
 }

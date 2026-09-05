@@ -123,8 +123,12 @@ export default function App(): React.JSX.Element {
         isStopping={isStopping}
         downloadProgress={downloadProgress}
         elapsedSeconds={elapsedSeconds}
+        canResume={
+          viewingSession !== null && !isRecording && !isStarting && downloadProgress === null
+        }
         onRecord={handleRecord}
         onStop={handleStop}
+        onResume={handleResume}
       />
 
       <div className="border-t border-line" />
@@ -151,8 +155,6 @@ export default function App(): React.JSX.Element {
           isStarting={startingSessionId !== null && viewingSessionId === startingSessionId}
           isStopping={isStopping && viewingSessionId === activeSessionId}
           elapsedSeconds={elapsedSeconds}
-          canResume={!isRecording && downloadProgress === null}
-          onResume={handleResume}
           onRename={handleRename}
         />
       </div>

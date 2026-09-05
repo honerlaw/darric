@@ -29,7 +29,7 @@ harder to find is the one that continues work already in progress. Putting `Resu
 makes "how do I start capturing?" have one answer in one place.
 
 The move also fixes an implicit gate. `canResume` is `!isRecording && downloadProgress === null` — it
-never checks that a session is *selected*, because `RecorderPane` returns its placeholder early when
+never checks that a session is _selected_, because `RecorderPane` returns its placeholder early when
 `session === null` and the footer was therefore unreachable. In the header there is no such early return,
 so the condition has to be stated: Resume is offered only when a recording is selected.
 
@@ -94,7 +94,7 @@ running".
 6. Resume is absent when nothing is selected, when a recording is in flight, while the speech model is
    downloading, and while a start is in flight; present when a stopped recording is selected and none of
    those hold.
-7. Clicking Resume in the header resumes the *selected* recording — the existing `App` tests that drive
+7. Clicking Resume in the header resumes the _selected_ recording — the existing `App` tests that drive
    resume through the accessible name `Resume recording` still pass, unmodified.
 8. Every new behaviour is mutation-tested: reverting each fix individually fails the suite.
 9. `npm run check` passes (typecheck, typecheck:node, lint, format, clippy, rustfmt, tests).

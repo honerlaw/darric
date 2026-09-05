@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { emit } from "@tauri-apps/api/event";
 import App from "./App";
 import { mockCommands } from "./test/tauri-helpers";
@@ -593,6 +593,103 @@ describe("App session-scoped UI state", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Resume recording/ }));
 
     expect(await screen.findByText(/Starting…/, { selector: "p" })).toBeInTheDocument();
+
+    release();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Stop$/ })).toBeInTheDocument();
+    });
+  });
+});
+
+describe("App resume placement and availability", () => {
+  it("puts Resume in the header chrome rather than the transcript pane", async () => {
+    // Record and Stop already live in the header. Resume is the same action
+    // against an existing recording, and below a scrolling transcript it was the
+    // hardest of the three to find.
+    mockOneRecording();
+    render(<App />);
+
+    fireEvent.click(await screen.findByText("Standup"));
+
+    const header = screen.getByRole("banner");
+    expect(
+      await within(header).findByRole("button", { name: /Resume recording/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("withholds Resume until a recording is selected", async () => {
+    // In the pane the selection gate was implicit — no session meant the footer
+    // was never reached. The header has no such early return, so the gate has to
+    // be stated or Resume renders with nothing to act on.
+    mockOneRecording();
+    render(<App />);
+
+    await screen.findByText(/Select a recording/);
+
+    expect(screen.queryByRole("button", { name: /Resume recording/ })).toBeNull();
+  });
+
+  it("withholds Resume while a recording is in flight", async () => {
+    // Selecting a past recording mid-capture leaves every other clause of the
+    // gate satisfied — a session is selected, no start is pending, no download.
+    // Only `!isRecording` stops Resume from offering a second concurrent
+    // capture, which the backend would reject.
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [LIVE_SESSION, PAST_SESSION],
+      list_capture_devices: () => [],
+      capture_drop_count: () => 0,
+      get_session_transcript: () => [],
+      start_session: () => "live",
+    });
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Record/ }));
+    await screen.findByRole("button", { name: /Stop$/ });
+
+    fireEvent.click(screen.getByText("Retro"));
+
+    expect(screen.queryByRole("button", { name: /Resume recording/ })).toBeNull();
+  });
+
+  it("withholds Resume while a start is already in flight", async () => {
+    // `canResume` stays true for the whole resume, which was harmless in a
+    // footer the user had just clicked out from under. Beside a Record button
+    // already reading "Starting…", a live Resume invites a second concurrent
+    // start.
+    let release = (): void => undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = (): void => {
+        resolve();
+      };
+    });
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [
+        {
+          id: "a",
+          topic: "Standup",
+          started_at: "2024-01-01T09:00:00Z",
+          ended_at: "2024-01-01T09:30:00Z",
+          created_at: "2024-01-01T09:00:00Z",
+          recorded_minutes: 30,
+        },
+      ],
+      list_capture_devices: () => [],
+      capture_drop_count: () => 0,
+      get_session_transcript: () => [],
+      resume_session: async () => {
+        await pending;
+        return "a";
+      },
+    });
+    render(<App />);
+
+    fireEvent.click(await screen.findByText("Standup"));
+    fireEvent.click(await screen.findByRole("button", { name: /Resume recording/ }));
+
+    await screen.findByRole("button", { name: /Starting…/ });
+    expect(screen.queryByRole("button", { name: /Resume recording/ })).toBeNull();
 
     release();
     await waitFor(() => {

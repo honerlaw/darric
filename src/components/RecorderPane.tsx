@@ -40,14 +40,7 @@ interface RecorderPaneProps {
    * the active one's state.
    */
   isStopping: boolean;
-  /**
-   * False while any recording is in flight (resuming a second one would be
-   * rejected) and while the speech model is still downloading (resuming would
-   * block on it, with no way to tell). Already includes `!isRecording`.
-   */
-  canResume: boolean;
   elapsedSeconds: number;
-  onResume: () => void;
   onRename: (topic: string) => void;
 }
 
@@ -60,9 +53,7 @@ export function RecorderPane({
   isRecording,
   isStarting,
   isStopping,
-  canResume,
   elapsedSeconds,
-  onResume,
   onRename,
 }: RecorderPaneProps): React.JSX.Element {
   const [editingTitle, setEditingTitle] = useState(false);
@@ -184,18 +175,6 @@ export function RecorderPane({
           </div>
         )}
       </div>
-
-      {canResume && (
-        <div className="flex shrink-0 items-center gap-3 border-t border-line px-10 py-4">
-          <button
-            type="button"
-            onClick={onResume}
-            className="cursor-pointer rounded-[8px] bg-accent px-4 py-2 text-[13px] font-[500] text-accent-fg transition-colors hover:bg-accent-hover"
-          >
-            Resume recording
-          </button>
-        </div>
-      )}
     </div>
   );
 }
