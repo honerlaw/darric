@@ -68,3 +68,5 @@ display: `activeId={isRecording && !isStopping ? activeSessionId : null}`.
 - [[2026-09-05-reference-stop-session-releases-the-engine-before-teardown]] — why the drop warning has to outlive its recording at all
 - [[2026-09-05-pattern-ui-rewrites-drop-state-guards-not-markup]] — the same class of cross-entity guard, lost rather than overloaded
 - [[2026-09-05-pattern-fixing-one-path-leaves-the-other-one-open]] — see also
+- [[2026-09-05-pattern-one-error-slot-many-writers-needs-provenance]] — see also
+- [[2026-09-05-pattern-renderhook-reads-callbacks-fresh-so-stale-closures-cannot-fail]] — see also

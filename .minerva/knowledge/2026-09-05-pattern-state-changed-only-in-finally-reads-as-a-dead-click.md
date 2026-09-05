@@ -70,3 +70,4 @@ Two consequences that a "just show a spinner" framing misses:
 - [[2026-09-05-pattern-an-early-return-can-make-a-feature-unreachable]] — the other way this app rendered a state nobody could see
 - [[2026-09-05-pattern-verifying-a-sequence-says-nothing-about-whether-it-runs]] — the same "does this actually run?" question asked of a guard rather than a render
 - [[2026-09-05-pattern-shared-state-cannot-be-cleared-for-one-reader]] — see also
+- [[2026-09-05-bug-a-functional-updater-reads-a-ref-after-the-caller-has-moved-on]] — see also
