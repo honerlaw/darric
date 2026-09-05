@@ -1,7 +1,9 @@
 # MCP tool handlers wrap rusqlite calls in `tokio::task::spawn_blocking`
 
 **Date**: 2026-05-18
-**Context**: .minerva/work/001-mcp-server
+**Type**: decision
+**Summary**: every MCP tool handler dispatches its rusqlite query through `tokio::task::spawn_blocking` — don't strip it, it prevents runtime stalls and satisfies `unused_async`
+**Context**: .minerva/work/2026-05-19-mcp-server
 
 ## Context
 
@@ -30,3 +32,8 @@ json_result(&value)
 - The pattern of double `map_err(internal)?` (one for `JoinError` from spawn_blocking, one for the query's own `rusqlite::Error`) is intentional, not a copy-paste artifact.
 - This decision applies to MCP tool handlers specifically. Existing Tauri command handlers (`commands/*.rs`) do NOT follow this pattern — they're called from the UI's request path, where the cost-benefit tradeoff is different. Don't retrofit blindly.
 - If we ever add write-tools, they should follow the same pattern (writes block too) and additionally take a lock on any in-app state that mirrors the DB.
+
+## Related
+
+- [[2026-05-19-decision-rmcp-as-mcp-sdk]] — handler asyncness comes from rmcp's `#[tool]` macro
+- [[2026-05-19-decision-inline-tests-for-mcp-queries]] — the sync query layer offloaded here is the one tested inline

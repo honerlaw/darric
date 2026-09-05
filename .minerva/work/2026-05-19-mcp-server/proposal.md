@@ -27,7 +27,7 @@ A new module `src-tauri/src/mcp_server/` lives alongside the existing `src-tauri
 ### Stack
 
 - `axum 0.8` for the HTTP listener.
-- `rmcp 1.7` (the official `modelcontextprotocol/rust-sdk`) for protocol framing, with features `server, macros, transport-streamable-http-server, schemars`. See [decisions/001](../../decisions/001-rmcp-as-mcp-sdk.md) for the version pin and CVE rationale.
+- `rmcp 1.7` (the official `modelcontextprotocol/rust-sdk`) for protocol framing, with features `server, macros, transport-streamable-http-server, schemars`. See [knowledge/2026-05-19-decision-rmcp-as-mcp-sdk](../../knowledge/2026-05-19-decision-rmcp-as-mcp-sdk.md) for the version pin and CVE rationale.
 - The existing `state::DbConn(Mutex<rusqlite::Connection>)` is shared with the rest of the app. WAL mode is already on, so concurrent reads are safe.
 
 ### Transport
@@ -48,7 +48,7 @@ Streamable HTTP at `POST /mcp`. Single endpoint, SSE for streaming, session mana
 | `by_tag(tag, types?)`                   | Notes/meetings/tasks with the given tag; `types` filters which kinds are returned                      |
 | `timeline(from?, to?, types?, limit?)`  | Chronological combined view; merges per-table queries in Rust                                          |
 
-All responses are JSON-serialized via `serde_json::Value`. All tool handlers dispatch their query through `tokio::task::spawn_blocking` — see [decisions/004](../../decisions/004-spawn-blocking-for-rusqlite-tools.md).
+All responses are JSON-serialized via `serde_json::Value`. All tool handlers dispatch their query through `tokio::task::spawn_blocking` — see [knowledge/2026-05-19-decision-spawn-blocking-for-rusqlite-tools](../../knowledge/2026-05-19-decision-spawn-blocking-for-rusqlite-tools.md).
 
 ### Lifecycle and settings
 
@@ -65,7 +65,7 @@ If the port is taken at startup, the server logs the error and the app continues
 
 ### Tests
 
-13 unit tests under `#[cfg(test)] mod tests` inside `mcp_server/service/queries.rs`, covering each tool's happy path plus filter behavior and transcript truncation. Inline tests instead of integration tests — see [decisions/003](../../decisions/003-inline-tests-for-mcp-queries.md).
+13 unit tests under `#[cfg(test)] mod tests` inside `mcp_server/service/queries.rs`, covering each tool's happy path plus filter behavior and transcript truncation. Inline tests instead of integration tests — see [knowledge/2026-05-19-decision-inline-tests-for-mcp-queries](../../knowledge/2026-05-19-decision-inline-tests-for-mcp-queries.md).
 
 ### Out of scope for v1 (deferred)
 

@@ -1,7 +1,9 @@
 # Use rmcp (official Rust MCP SDK), pinned at 1.7
 
 **Date**: 2026-05-18
-**Context**: .minerva/work/001-mcp-server
+**Type**: decision
+**Summary**: depend on rmcp 1.7 (the official Rust MCP SDK) for protocol framing and streamable HTTP; the 1.4 floor is a DNS-rebinding CVE fix
+**Context**: .minerva/work/2026-05-19-mcp-server
 
 ## Context
 
@@ -22,3 +24,8 @@ Depend on `rmcp = "1.7"` with features `server, macros, transport-streamable-htt
 - All MCP tool definitions go through rmcp's macro system (`#[tool_router]`, `#[tool(description = "...")]`, `Parameters<T>`). Tool input types must derive `serde::Deserialize` + `schemars::JsonSchema`.
 - The dependency footprint is significant (axum, tower, hyper, sse-stream, schemars), but Tauri already pulls in much of this transitively.
 - If rmcp ever materially breaks API in a major release, we re-evaluate hand-rolling — the existing MCP client code is the precedent and could be extended to a server. The trigger would be either a CVE without a fix or unmaintained-crate status.
+
+## Related
+
+- [[2026-05-19-decision-tool-handler-router-pattern]] — the macro system this pins is what forces the explicit router form
+- [[2026-05-19-decision-spawn-blocking-for-rusqlite-tools]] — rmcp's `#[tool]` macro is what makes every handler an `async fn`

@@ -38,3 +38,6 @@ ggml-*.bin
 
 # Claude Code local settings
 .claude/
+
+# minerva work-unit worktrees
+.minerva/worktrees/
