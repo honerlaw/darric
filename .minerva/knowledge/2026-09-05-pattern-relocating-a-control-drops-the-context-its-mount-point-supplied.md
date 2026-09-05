@@ -71,3 +71,4 @@ null` gates _and_ names; `canResume: boolean` could only gate, and the name had 
 - [[2026-09-05-pattern-ui-rewrites-drop-state-guards-not-markup]] — the guards a shape-driven change cannot see; that unit's example was this very button, passed `!isRecording` instead of a per-session flag
 - [[2026-09-05-constraint-aria-modal-promises-inertness-that-nothing-enforces]] — see also, the other accessibility gap in the same change
 - [[2026-09-05-decision-strip-darric-to-a-recorder]] — see also
+- [[2026-09-05-pattern-renderhook-reads-callbacks-fresh-so-stale-closures-cannot-fail]] — see also

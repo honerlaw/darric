@@ -55,3 +55,4 @@ different one started.
 
 - [[2026-09-05-pattern-shared-state-cannot-be-cleared-for-one-reader]] — the other half of this unit: the same surface, over-shared rather than under-attributed
 - [[2026-09-05-pattern-an-early-return-can-make-a-feature-unreachable]] — another defect that every individually-correct hop failed to reveal
+- [[2026-09-05-pattern-one-error-slot-many-writers-needs-provenance]] — see also
