@@ -16,6 +16,8 @@ interface RecorderPaneProps {
   devices: CaptureDevice[];
   isRecording: boolean;
   isStarting: boolean;
+  /** False while any recording is in flight — resuming a second one would be rejected. */
+  canResume: boolean;
   elapsedSeconds: number;
   downloadProgress: number | null;
   onResume: () => void;
@@ -28,6 +30,7 @@ export function RecorderPane({
   devices,
   isRecording,
   isStarting,
+  canResume,
   elapsedSeconds,
   downloadProgress,
   onResume,
@@ -36,6 +39,15 @@ export function RecorderPane({
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const endRef = useRef<HTMLDivElement>(null);
+  const sessionId = session?.id ?? null;
+
+  // Abandon an in-progress title edit when the selection moves to another
+  // recording. Without this the draft survives the switch and the next commit
+  // renames the newly-selected recording with the previous one's text.
+  useEffect(() => {
+    setEditingTitle(false);
+    setTitleDraft("");
+  }, [sessionId]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -145,7 +157,7 @@ export function RecorderPane({
         )}
       </div>
 
-      {!isRecording && (
+      {!isRecording && canResume && (
         <div className="flex shrink-0 items-center gap-3 border-t border-line px-10 py-4">
           <button
             type="button"

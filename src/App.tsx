@@ -23,6 +23,7 @@ export default function App(): React.JSX.Element {
     isStarting,
     downloadProgress,
     elapsedSeconds,
+    error,
     start,
     stop,
     resume,
@@ -111,11 +112,18 @@ export default function App(): React.JSX.Element {
           isRecording={isRecording && viewingSessionId === activeSessionId}
           isStarting={isStarting}
           elapsedSeconds={elapsedSeconds}
+          canResume={!isRecording}
           downloadProgress={downloadProgress}
           onResume={handleResume}
           onRename={handleRename}
         />
       </div>
+
+      {error !== null && (
+        <div className="shrink-0 border-t border-line bg-paper-sunken px-6 py-2">
+          <span className="font-mono text-[11px] text-danger">{error}</span>
+        </div>
+      )}
     </div>
   );
 }
