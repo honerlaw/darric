@@ -45,20 +45,14 @@ jobs:
 
   rust:
     name: Rust
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libasound2-dev \
-            cmake
+      # darric is a macOS app (README; whisper-rs is built with the `metal`
+      # feature, which has no Linux equivalent). CI builds what ships.
+      - name: Ensure cmake
+        run: cmake --version || brew install cmake
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -88,20 +82,14 @@ jobs:
 
   rust-test:
     name: Rust Tests
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            libssl-dev \
-            libasound2-dev \
-            cmake
+      # darric is a macOS app (README; whisper-rs is built with the `metal`
+      # feature, which has no Linux equivalent). CI builds what ships.
+      - name: Ensure cmake
+        run: cmake --version || brew install cmake
 
       - uses: dtolnay/rust-toolchain@stable
 
