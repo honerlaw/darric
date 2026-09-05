@@ -71,14 +71,45 @@ export function useSession(): UseSessionReturn {
   // above because the guard has to see the value set by the call in flight,
   // not the one captured when this `stop` closure was created.
   const stoppingRef = useRef(false);
+  // The message the session-write commands (`update`, `remove`) last put in
+  // `error`. They clear only their own message, because `error` is one shared
+  // slot with no provenance: a succeeding delete has no business erasing a
+  // model-download failure that is still true, and `start`/`resume` get away
+  // with clearing unconditionally only because they *are* the retry of the
+  // thing that failed.
+  const writeErrorRef = useRef<string | null>(null);
+
+  const reportWriteFailure = useCallback((e: unknown): void => {
+    const message = String(e);
+    writeErrorRef.current = message;
+    setError(message);
+  }, []);
+
+  // Clears this command's own failure message on a later success, and leaves
+  // anything another subsystem has since written in place.
+  const clearOwnWriteError = useCallback((): void => {
+    // Read the ref *before* nulling it: `setError`'s updater runs after this
+    // function returns, so it would otherwise compare against the null this
+    // very call had just written and clear nothing.
+    const own = writeErrorRef.current;
+    writeErrorRef.current = null;
+    setError((current) => (current === own ? null : current));
+  }, []);
 
   const refresh = useCallback(async (): Promise<void> => {
     const list = await listSessions();
     setSessions(list);
   }, []);
 
+  // Caught here rather than inside `refresh`, which has to keep rejecting: its
+  // other callers all await it inside their own `try`, and that is what lets
+  // `remove` tell a caller the list is stale. This is the one call site with
+  // nobody above it — an unreadable list at mount would otherwise be an
+  // unhandled rejection behind an empty sidebar that explains nothing.
   useEffect(() => {
-    void refresh();
+    void refresh().catch((e: unknown) => {
+      setError(String(e));
+    });
   }, [refresh]);
 
   // A download started in Tauri's `setup()` emits before the webview holds any
@@ -219,35 +250,38 @@ export function useSession(): UseSessionReturn {
   const update = useCallback(
     async (id: string, topic?: string): Promise<void> => {
       try {
-        // Clearing first, as `start` and `resume` do: a previous failure's
-        // message must not outlive the attempt that succeeded.
-        setError(null);
         await updateSession(id, topic);
         await refresh();
+        clearOwnWriteError();
       } catch (e) {
-        setError(String(e));
+        reportWriteFailure(e);
       }
     },
-    [refresh],
+    [refresh, clearOwnWriteError, reportWriteFailure],
   );
 
   const remove = useCallback(
     async (id: string): Promise<boolean> => {
       try {
-        setError(null);
         await deleteSession(id);
-        // Functional, so only the id this call deleted is cleared — reading
-        // `activeSessionId` from the closure could be a render behind, and it
-        // is what kept this callback depending on the value.
-        setActiveSessionId((current) => (current === id ? null : current));
         await refresh();
+        // After the refresh, not before. On the refresh-failure path this
+        // returns false — "the recording may still be there" — and clearing the
+        // id first would half-apply the delete behind that answer, leaving a
+        // resumable-looking row whose session is gone.
+        //
+        // Functional, so only the id this call deleted is cleared: reading
+        // `activeSessionId` from the closure could be a render behind, and it is
+        // what kept this callback depending on the value.
+        setActiveSessionId((current) => (current === id ? null : current));
+        clearOwnWriteError();
         return true;
       } catch (e) {
-        setError(String(e));
+        reportWriteFailure(e);
         return false;
       }
     },
-    [refresh],
+    [refresh, clearOwnWriteError, reportWriteFailure],
   );
 
   return {
