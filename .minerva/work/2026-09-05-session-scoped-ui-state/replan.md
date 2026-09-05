@@ -9,7 +9,7 @@ justified it as safe on the grounds that "every consumer of `activeSessionId` is
 
 ## What changed
 
-**That justification was wrong, and the existing test suite caught it.** One consumer is *not*
+**That justification was wrong, and the existing test suite caught it.** One consumer is _not_
 gated on `isRecording`:
 
 ```tsx

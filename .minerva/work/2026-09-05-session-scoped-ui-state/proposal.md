@@ -25,7 +25,7 @@ than during it.
 
 **#22 — `isStarting` reaches `RecorderPane` ungated.** `App.tsx` passes four active-session
 props to the pane. Three now carry a `viewingSessionId === activeSessionId` gate; `isStarting`
-does not, so a merely-*selected* recording renders "Starting…" while a different one starts.
+does not, so a merely-_selected_ recording renders "Starting…" while a different one starts.
 
 **#23 — flush lines can land on the wrong transcript.** `useTranscript` keeps a
 `transcript_chunk` listener alive for 20 s after a stop so whisper's asynchronous flush lines
@@ -47,10 +47,10 @@ independent fixes, one shared principle.
 2. **A `startingSessionId` names what is starting (#22).** The obvious fix — reusing
    `viewingSessionId === activeSessionId` — is wrong, and the issue says so: during a start
    `activeSessionId` has not been assigned yet (it is set from `start_session`'s return), so that
-   gate reads false for the whole operation and would *remove* the "Starting…" that a **resume**
+   gate reads false for the whole operation and would _remove_ the "Starting…" that a **resume**
    correctly shows today. Instead `useSession` exposes `startingSessionId`: the id for a resume,
    `null` for a fresh recording. `App` passes `isStarting={startingSessionId !== null &&
-   viewingSessionId === startingSessionId}`. A fresh start shows "Starting…" in the header only,
+viewingSessionId === startingSessionId}`. A fresh start shows "Starting…" in the header only,
    which is correct — there is no session for the pane to describe yet.
 
 3. **The `transcript_chunk` event carries its `session_id` (#23).** `persist_and_emit` already
@@ -60,7 +60,7 @@ independent fixes, one shared principle.
    The frontend-only alternative — capturing the session id when the linger listener attaches —
    **does not work**, and this is worth recording because it looks like it does. The `[sessionId]`
    effect is declared before the `[isLive]` effect, so on the render where the user clicks away
-   both run in that order: `sessionRef.current` is *already* the newly-selected session by the
+   both run in that order: `sessionRef.current` is _already_ the newly-selected session by the
    time the linger listener attaches, and the captured value is the new session, not the stopping
    one. A fix that depends on effect declaration order is exactly the shape of two defects already
    recorded here ([[2026-09-05-pattern-an-early-return-can-make-a-feature-unreachable]],

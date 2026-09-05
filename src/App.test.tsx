@@ -324,3 +324,112 @@ describe("App stop feedback", () => {
     });
   });
 });
+
+describe("App session-scoped UI state", () => {
+  /** The pulsing "recording now" dots inside the recordings sidebar only. */
+  function sidebarDots(container: HTMLElement): number {
+    return container.querySelectorAll("aside .pulse-dot").length;
+  }
+
+  it("clears the sidebar's live dot once the recording stops", async () => {
+    // `activeSessionId` deliberately outlives the recording — the dropped-segment
+    // warning is attributed with it — so the dot has to be gated on `isRecording`
+    // at the point of display rather than by clearing the id.
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [LIVE_SESSION],
+      list_capture_devices: () => [],
+      capture_drop_count: () => 0,
+      get_session_transcript: () => [],
+      start_session: () => "live",
+      stop_session: () => undefined,
+    });
+    const { container } = render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Record/ }));
+    await screen.findByRole("button", { name: /Stop$/ });
+    expect(sidebarDots(container)).toBe(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /Stop$/ }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Record/ })).toBeEnabled();
+    });
+
+    expect(sidebarDots(container)).toBe(0);
+  });
+
+  it("does not tell a selected past recording that it is starting", async () => {
+    // `isStarting` is global. The header is right to report the start; the pane
+    // of an unrelated selected recording is not.
+    let release = (): void => undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = (): void => {
+        resolve();
+      };
+    });
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [LIVE_SESSION, PAST_SESSION],
+      list_capture_devices: () => [],
+      capture_drop_count: () => 0,
+      get_session_transcript: () => [],
+      start_session: async () => {
+        await pending;
+        return "live";
+      },
+    });
+    render(<App />);
+
+    fireEvent.click(await screen.findByText("Retro"));
+    await screen.findByText(/No transcript for this recording/);
+
+    fireEvent.click(screen.getByRole("button", { name: /Record/ }));
+
+    // The header reports the start — that part is correct and must keep working.
+    await screen.findByRole("button", { name: /Starting…/ });
+    // "Retro" is not the recording being started, so its pane must not claim to be.
+    // Scoped to the pane's own <p>; the header's label is the span above.
+    expect(screen.queryByText(/Starting…/, { selector: "p" })).toBeNull();
+    expect(screen.getByText(/No transcript for this recording/)).toBeInTheDocument();
+
+    release();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Stop$/ })).toBeInTheDocument();
+    });
+  });
+
+  it("still tells the resumed recording that it is starting", async () => {
+    // The regression guard for the fix above. Reusing the obvious
+    // `viewingSessionId === activeSessionId` gate would have passed the previous
+    // test while silently removing this — `activeSessionId` is not assigned until
+    // the resume returns, so that gate reads false for the whole operation.
+    let release = (): void => undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = (): void => {
+        resolve();
+      };
+    });
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [PAST_SESSION],
+      list_capture_devices: () => [],
+      capture_drop_count: () => 0,
+      get_session_transcript: () => [],
+      resume_session: async () => {
+        await pending;
+        return "past";
+      },
+    });
+    render(<App />);
+
+    fireEvent.click(await screen.findByText("Retro"));
+    fireEvent.click(await screen.findByRole("button", { name: /Resume recording/ }));
+
+    expect(await screen.findByText(/Starting…/, { selector: "p" })).toBeInTheDocument();
+
+    release();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Stop$/ })).toBeInTheDocument();
+    });
+  });
+});
