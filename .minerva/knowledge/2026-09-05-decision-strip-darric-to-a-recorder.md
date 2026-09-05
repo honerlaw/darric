@@ -46,3 +46,4 @@ commands to 9. Migration 009 drops the `notes`, `tasks`, `tags`, `session_tags`,
 - [[2026-09-05-constraint-phases-must-use-the-canonical-list-form]] — see also
 - [[2026-09-05-pattern-ui-rewrites-drop-state-guards-not-markup]] — see also
 - [[2026-09-05-reference-whisper-inference-serialises-on-one-metal-gpu]] — see also
+- [[2026-09-05-pattern-an-early-return-can-make-a-feature-unreachable]] — see also
