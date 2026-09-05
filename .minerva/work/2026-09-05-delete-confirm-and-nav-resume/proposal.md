@@ -1,7 +1,7 @@
 # Proposal: delete-confirm-and-nav-resume
 
 **Date**: 2026-09-05
-**Status**: Draft
+**Status**: Shipped (2026-09-05)
 
 ## Goal
 
@@ -35,52 +35,70 @@ so the condition has to be stated: Resume is offered only when a recording is se
 
 ## Approach
 
-**Two independent changes; no backend work, no new dependencies, no shared state lifted into `App` that
-isn't already there.**
+**Two independent changes; no backend work, no new dependencies.** Both halves needed more than the
+relocation of markup they looked like — the details below are what shipped, not what was planned.
 
 ### 1. Trash icon + confirmation modal (`RecordingList`, new `ConfirmDialog`)
 
 The repo has no icon library and draws its few glyphs by hand, so the trash can is an inline SVG in
-`RecordingList` — stroke-based, `currentColor`, sized to the existing 13px control so hover/opacity
-behaviour and the `aria-label` are unchanged. `aria-hidden` on the SVG keeps the accessible name coming
-from the label, which is what the existing tests read.
+`RecordingList` — stroke-based, `currentColor`, `aria-hidden` so the accessible name still comes from
+the button's `aria-label`.
 
-The confirmation lives in a new `src/components/ConfirmDialog.tsx`: an overlay `div` with
-`role="dialog"`, `aria-modal="true"`, an `aria-labelledby` title, a destructive confirm button and a
-cancel button. It is `position: fixed`, so the sidebar's `overflow-y-auto` does not clip it. Escape
-cancels; the confirm button takes focus on open.
+The confirmation is a new `src/components/ConfirmDialog.tsx`: a `fixed` backdrop (so the sidebar's
+`overflow-y-auto` cannot clip it) around a panel with `role="dialog"`, `aria-modal="true"`,
+`aria-labelledby` and `aria-describedby`. `RecordingList` owns `pendingDeleteId`; `App` is untouched
+by this half. The pending session is **re-resolved from the live `sessions` array on every render**
+rather than latched beside the id, so a session that disappears while the prompt is open closes it
+instead of leaving a confirm button wired to a stale id.
 
-`RecordingList` owns the `pendingDeleteId` state. Confirming calls the existing `onDelete(id)` prop and
-clears the state; cancelling clears it alone. `App` is untouched by this half — the delete flow is a
-sidebar concern and lifting it would only add prop drilling.
+Three things here are not obvious and are the reason the component is 100 lines rather than 30:
 
-The two alternatives were weaker. `window.confirm` is one line but renders an OS chrome dialog outside
-the app's design language and cannot be styled or reliably asserted against. Lifting `pendingDeleteId`
-into `App` and rendering one dialog at the root buys nothing here: a `fixed` overlay already escapes the
-sidebar's clipping, and there is exactly one caller.
+- **Dismissal is keyed to `mousedown`, not `click`.** A click's target is the common ancestor of its
+  press and its release, so pressing on the dialog's body text and releasing over the dim area
+  dispatches the click _on the backdrop_ — a click-based backdrop closes the dialog mid-selection,
+  and `stopPropagation` on the panel structurally cannot see it. `e.target === e.currentTarget` on
+  the click does not fix it either, for the same reason. See
+  [[2026-09-05-bug-a-click-targets-the-common-ancestor-of-its-press-and-release]].
+- **`aria-modal="true"` is a promise the code has to keep.** Without containment, three Tabs from
+  Confirm reached the Record button behind the backdrop, where Enter starts a recording under a modal
+  the user cannot see past. The document keydown handler now cycles Tab and Shift+Tab over the
+  panel's buttons. See [[2026-09-05-constraint-aria-modal-promises-inertness-that-nothing-enforces]].
+- **Focus is restored to the opener on close**, and the hover-revealed trigger gained
+  `focus-visible:opacity-100` — a keyboard user was otherwise tabbing onto an invisible button and
+  being dropped on `<body>` when they cancelled.
+
+`window.confirm` was rejected as unstyleable OS chrome; lifting `pendingDeleteId` into `App` was
+rejected because a `fixed` overlay already escapes the sidebar's clipping and there is one caller.
 
 ### 2. Resume in the header (`Header`, `App`, `RecorderPane`)
 
-`Header` gains `canResume: boolean` and `onResume: () => void`, and renders a Resume button immediately
-before the Record button when `canResume` is true. It carries the visible text `Resume` and
-`aria-label="Resume recording"` — the accessible name existing tests already match on, kept stable
-deliberately. Styling follows the header's existing pill button rather than the pane footer's filled
-accent button, so the two controls read as one group.
+`RecorderPane` loses its resume props and its footer entirely. `Header` gains `onResume` and a single
+`resumeTarget: string | null` — **not** the `canResume: boolean` originally planned. One prop both
+gates the button and names it (`aria-label={`Resume recording “${resumeTarget}”`}`), because a control
+in global chrome no longer sits under the recording it acts on and nothing else says which one it is.
+The visible text stays `Resume`; the styling follows the header's pill button so Record and Resume
+read as one group.
 
-`RecorderPane` loses its `canResume` / `onResume` props and its footer entirely.
-
-`App` computes:
+`App` computes the target:
 
 ```ts
-canResume={viewingSession !== null && !isRecording && !isStarting && downloadProgress === null}
+resumeTarget={
+  viewingSession !== null && !isRecording && !isStarting && downloadProgress === null
+    ? sessionLabel(viewingSession)
+    : null
+}
 ```
 
-Three of those four conditions are today's `canResume` plus the selection gate `RecorderPane`'s early
-return used to supply implicitly. The fourth, `!isStarting`, is new and deliberate: `useSession.resume`
-leaves `canResume` true for the whole in-flight resume, which was harmless in a footer the user had just
-clicked out from under, but in the header it would sit enabled beside a Record button already reading
-"Starting…" and invite a second concurrent start. "Can actually be resumed" excludes "a start is already
-running".
+Three of those clauses are the old `canResume` plus the selection gate `RecorderPane`'s early return
+used to supply implicitly — relocating a control deletes the preconditions its mount point was
+quietly providing. The fourth, `!isStarting`, is new: `useSession.resume` leaves the gate open for the
+whole in-flight resume, which was harmless in a footer the user had just clicked out from under but in
+the header would sit enabled beside a Record button already reading "Starting…". See
+[[2026-09-05-pattern-relocating-a-control-drops-the-context-its-mount-point-supplied]].
+
+`sessionLabel` moved from `RecordingList` into `lib/utils` so the row, the delete trigger's label, the
+prompt and the Resume button all name a recording the same way — they previously diverged for a topic
+of `""`, where the trigger's accessible name collapsed to a bare "Delete".
 
 ## Success criteria
 
@@ -98,6 +116,13 @@ running".
    resume through the accessible name `Resume recording` still pass, unmodified.
 8. Every new behaviour is mutation-tested: reverting each fix individually fails the suite.
 9. `npm run check` passes (typecheck, typecheck:node, lint, format, clippy, rustfmt, tests).
+
+## Deferred work
+
+One item, filed as [#30](https://github.com/honerlaw/darric/issues/30): `useSession.remove` has no
+`catch` and `App.handleDelete` calls it with a bare `void`, so a failed `delete_session` leaves the
+user having explicitly confirmed a delete that silently does not happen. Pre-existing — this unit
+raised its stakes rather than creating it, so it was filed rather than folded in.
 
 ## Open Questions
 
