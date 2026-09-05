@@ -1,3 +1,4 @@
+use crate::audio::device::ExclusionRegistry;
 use crate::audio::CaptureEngine;
 use crate::transcription::Transcriber;
 use std::collections::HashSet;
@@ -10,6 +11,9 @@ pub struct AppState {
     /// The running capture session, if any.
     pub engine: Mutex<Option<CaptureEngine>>,
     pub transcriber: Arc<Mutex<Option<Arc<Transcriber>>>>,
+    /// Aggregate devices this process created for output taps, which must never
+    /// be enumerated back as inputs.
+    pub exclusions: ExclusionRegistry,
     /// Device ids the user has switched OFF. Everything discovered is captured
     /// by default — "record everything" is the point — so this stores the
     /// exceptions rather than the selections, and a newly plugged-in device is
@@ -23,6 +27,7 @@ impl AppState {
             db: Arc::new(DbConn(Mutex::new(conn))),
             engine: Mutex::new(None),
             transcriber: Arc::new(Mutex::new(None)),
+            exclusions: ExclusionRegistry::new(),
             disabled_devices: Mutex::new(disabled_devices),
         }
     }

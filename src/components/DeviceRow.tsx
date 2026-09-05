@@ -79,6 +79,13 @@ export function DeviceRow({ devices, onToggle }: DeviceRowProps): React.JSX.Elem
             {d.name}
           </span>
 
+          <span
+            className="w-[42px] shrink-0 font-mono text-[10px] text-ink-4"
+            title={d.direction === "output" ? "System audio from this device" : "Microphone input"}
+          >
+            {d.direction === "output" ? "out" : "in"}
+          </span>
+
           <div className="h-[4px] flex-1 overflow-hidden rounded-full bg-paper-sunken">
             <div
               className="h-full rounded-full bg-accent transition-[width] duration-150"

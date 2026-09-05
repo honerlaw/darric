@@ -4,8 +4,12 @@
 <plist version="1.0">
 <dict>
   <key>NSMicrophoneUsageDescription</key>
-  <string>Required to record your microphone during sessions.</string>
-  <key>NSScreenCaptureUsageDescription</key>
-  <string>Required to capture system audio during sessions.</string>
+  <string>Required to record your microphones during a recording.</string>
+  <!-- Core Audio process taps are gated on the audio-recording permission, not
+       on screen recording. The app previously declared NSScreenCaptureUsageDescription
+       for a ScreenCaptureKit path that was never implemented; taps replace it,
+       and the audio-only prompt is markedly less alarming to grant. -->
+  <key>NSAudioCaptureUsageDescription</key>
+  <string>Required to record audio your Mac is playing, such as the other side of a call.</string>
 </dict>
 </plist>

@@ -6,21 +6,24 @@
 //! shared [`crate::transcription::pool::TranscriptionPool`], which is where
 //! backpressure is absorbed.
 
+pub mod coreaudio;
 pub mod device;
 pub mod resample;
 pub mod segmenter;
 pub mod source;
+pub mod tap;
 
 use crate::error::Result;
 use crate::state::DbConn;
 use crate::transcription::pool::{SegmentJob, TranscribedLine, TranscriptionPool};
 use crate::transcription::Transcriber;
-use device::CaptureDevice;
+use device::{CaptureDevice, ExclusionRegistry};
 use segmenter::Segmenter;
-use source::{SharedStatus, SourceStatus};
+use source::{SharedStatus, SourceState, SourceStatus};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
+use tap::OutputTap;
 use tauri::{AppHandle, Emitter};
 
 /// Segments held per source before the oldest is dropped.
@@ -38,6 +41,10 @@ pub struct CaptureEngine {
     statuses: Vec<SharedStatus>,
     segmenters: Vec<(CaptureDevice, Arc<Mutex<Segmenter>>)>,
     pool: Option<Arc<TranscriptionPool>>,
+    /// Live output taps. Dropping these stops and destroys the underlying Core
+    /// Audio objects, so they are held for the session's lifetime.
+    taps: Vec<OutputTap>,
+    exclusions: ExclusionRegistry,
 }
 
 impl CaptureEngine {
@@ -53,6 +60,7 @@ impl CaptureEngine {
         worker_count: usize,
         app: &AppHandle,
         db: &Arc<DbConn>,
+        exclusions: &ExclusionRegistry,
     ) -> Result<Self> {
         let shutdown = Arc::new(AtomicBool::new(false));
 
@@ -79,8 +87,66 @@ impl CaptureEngine {
         let mut threads = Vec::new();
         let mut statuses = Vec::new();
         let mut segmenters = Vec::new();
+        let mut taps = Vec::new();
 
-        for dev in devices {
+        let (outputs, inputs): (Vec<_>, Vec<_>) = devices
+            .into_iter()
+            .partition(|d| d.direction == crate::transcription::pool::Direction::Output);
+
+        // Output devices are captured through a Core Audio process tap rather
+        // than a cpal stream. Core Audio drives the callback itself, so these
+        // need no supervisor thread — only somewhere to live until stop.
+        for dev in outputs {
+            let status: SharedStatus = Arc::new(Mutex::new(SourceStatus::new(dev.clone())));
+            let seg = Arc::new(Mutex::new(Segmenter::new()));
+            statuses.push(Arc::clone(&status));
+            segmenters.push((dev.clone(), Arc::clone(&seg)));
+
+            let pool_for_tap = pool.clone();
+            let dev_for_cb = dev.clone();
+            let status_for_cb = Arc::clone(&status);
+            let sink = move |samples: &[f32]| {
+                if let Ok(mut st) = status_for_cb.try_lock() {
+                    st.level = resample::rms(samples);
+                }
+                let ready = {
+                    let mut sg = seg
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    sg.push(samples)
+                };
+                for segment in ready {
+                    if let Some(p) = pool_for_tap.as_ref() {
+                        p.submit(job(&dev_for_cb, segment));
+                    }
+                }
+            };
+
+            match OutputTap::start(&dev.id, &dev.name, sink) {
+                Ok(t) => {
+                    // Register before anything can enumerate again, or the app
+                    // lists its own tap as a microphone and records itself.
+                    exclusions.register(t.aggregate_uid());
+                    let mut st = status
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    st.state = SourceState::Active;
+                    drop(st);
+                    log::info!("[audio] tapping output device {}", dev.name);
+                    taps.push(t);
+                }
+                Err(e) => {
+                    // One device failing must not sink the recording.
+                    log::error!("[audio] could not tap {}: {e}", dev.name);
+                    let mut st = status
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    st.state = SourceState::Failed;
+                }
+            }
+        }
+
+        for dev in inputs {
             let status: SharedStatus = Arc::new(Mutex::new(SourceStatus::new(dev.clone())));
             let seg = Arc::new(Mutex::new(Segmenter::new()));
             statuses.push(Arc::clone(&status));
@@ -140,6 +206,8 @@ impl CaptureEngine {
             statuses,
             segmenters,
             pool,
+            taps,
+            exclusions: exclusions.clone(),
         })
     }
 
@@ -165,8 +233,16 @@ impl CaptureEngine {
     }
 
     /// Stop every source, flush trailing partial segments, and drain the pool.
-    pub fn stop(self) {
+    pub fn stop(mut self) {
         self.shutdown.store(true, Ordering::SeqCst);
+
+        // Drop the taps first: this stops their IOProcs, so no further samples
+        // arrive while the segmenters are being flushed below.
+        for t in self.taps.drain(..) {
+            self.exclusions.unregister(t.aggregate_uid());
+            drop(t);
+        }
+
         for t in self.threads {
             t.join().ok();
         }

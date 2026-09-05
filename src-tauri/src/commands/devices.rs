@@ -18,7 +18,8 @@ pub struct DeviceInfo {
 /// Every capture device, merged with its live state if a recording is running.
 #[tauri::command]
 pub async fn list_capture_devices(state: tauri::State<'_, AppState>) -> Result<Vec<DeviceInfo>> {
-    let devices = device::list_input_devices();
+    let mut devices = device::list_input_devices(&state.exclusions);
+    devices.extend(device::list_output_devices(&state.exclusions));
     let disabled = state
         .disabled_devices
         .lock()
