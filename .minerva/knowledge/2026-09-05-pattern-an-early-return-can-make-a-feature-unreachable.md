@@ -52,3 +52,4 @@ rendered from `App`, above the pane, where the state it displays actually lives.
 - [[2026-09-05-pattern-ui-rewrites-drop-state-guards-not-markup]] — another defect this rewrite left behind that is invisible in a screenshot
 - [[2026-09-05-decision-strip-darric-to-a-recorder]] — the rewrite that produced the misplaced mount
 - [[2026-09-05-constraint-tauri-events-from-setup-reach-no-webview]] — see also
+- [[2026-09-05-pattern-state-changed-only-in-finally-reads-as-a-dead-click]] — see also
