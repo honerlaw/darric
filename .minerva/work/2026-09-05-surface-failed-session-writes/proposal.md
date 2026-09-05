@@ -1,7 +1,7 @@
 # Proposal: surface-failed-session-writes
 
 **Date**: 2026-09-05
-**Status**: Draft
+**Status**: Shipped (2026-09-05)
 **Closes**: #30
 
 ## Goal
@@ -51,39 +51,49 @@ that behaviour intact, which is the shape
 
 ## Approach
 
-**Make the two outliers match the three commands that already get this right, and make the one
-optimistic UI update conditional on the write having succeeded.**
+**Make every uncaught session command match the ones that already get this right, and make the one
+optimistic UI update conditional on the write having succeeded.** What shipped differs from the plan
+in two places, both found in review and both recorded below.
 
-1. **`remove` catches, and reports whether it deleted.** It gains the `try/catch` +
-   `setError(String(e))` shape `start` / `stop` / `resume` already use, plus the `setError(null)` on
-   entry that keeps a failed attempt's message from outliving the retry that fixed it. Its return
-   type becomes `Promise<boolean>` — `true` only when the backend actually deleted. A caller needs
-   that answer, and inventing it from the refreshed `sessions` list at the call site would be
-   guesswork.
+1. **`remove` catches, and reports whether it deleted.** Return type `Promise<boolean>`, documented
+   as "the delete completed **and** the list refreshed" — not the narrower "did `delete_session`
+   succeed". The two diverge when the delete lands and the following `refresh()` throws: `sessions`
+   still holds the recording, so a caller that deselected on the narrow reading would point the user
+   away from a row still visible in the sidebar.
 
-2. **`App.handleDelete` deselects only on success**, and does it with the functional-setState guard
-   `useSession.resume` already uses for `startingSessionId` — clear the selection only if it is
-   still the id this call deleted, so a selection change mid-delete is not clobbered:
+   `setActiveSessionId` runs **after** the refresh, not before. The plan had it before, which
+   half-applied the delete behind a `false` answer — leaving a resumable-looking row whose session
+   was gone.
 
-   ```ts
-   void removeSession(id).then((deleted) => {
-     if (deleted) setViewingSessionId((current) => (current === id ? null : current));
-   });
-   ```
+2. **`App.handleDelete` deselects only on success**, with the functional-setState guard
+   `useSession.resume` already uses for `startingSessionId`, so a selection change during an in-flight
+   delete is not clobbered. Moving the deselect after the await is what opens that window; it did not
+   exist in the optimistic version.
 
-3. **`activeSessionId` gets the same functional guard** inside `remove`, which also drops it from the
-   callback's dependency array — it was read from a closure that could be a render behind.
+3. **`activeSessionId` gets the same functional guard** inside `remove`, dropping it from the
+   callback's dependencies. The stale window this closes needs an interleaving — stop A, begin
+   deleting A, press Record again, let the delete resolve — that no single call can produce, which is
+   why the first version of this unit's test suite could not fail when the fix was reverted. See
+   [[2026-09-05-pattern-renderhook-reads-callbacks-fresh-so-stale-closures-cannot-fail]].
 
-4. **`update` catches too.** Its stakes are lower — an unchanged title is visible feedback that
-   nothing happened — but it is the other half of the same gap, and leaving it is the pattern cited
-   above. It keeps returning `void`: no caller has an optimistic update to gate.
+4. **`update` catches too**, and **`refresh`'s mount call site catches** — the third uncaught command,
+   missed at proposal time. The catch goes at the call site rather than inside `refresh`, because
+   `refresh` has to keep rejecting: its other callers all await it inside their own `try`, and that is
+   what lets `remove` report a stale list.
+
+5. **Error clearing is provenance-aware — the plan's `setError(null)` on entry was wrong.** `error`
+   is one shared slot; `start`/`resume` may clear it unconditionally because they _are_ the retry of
+   the thing that failed, and `remove`/`update` are not. Copying the idiom meant a successful delete
+   erased a still-true model-download failure, permanently. They now clear only their own message via
+   `writeErrorRef`. See [[2026-09-05-pattern-one-error-slot-many-writers-needs-provenance]], and
+   [[2026-09-05-bug-a-functional-updater-reads-a-ref-after-the-caller-has-moved-on]] for the bug that
+   implementing it introduced.
 
 **The alternative considered and rejected**: clearing the selection declaratively, from an effect
-that watches for the viewed session disappearing out of `sessions`. It would cover more paths than
-this one (a session deleted from elsewhere, say), but `sessions` is empty on the first render before
-`refresh()` resolves, so it needs a has-loaded guard to avoid clearing a valid selection at mount.
-That is more moving parts than the defect warrants, and it would not make the failed delete any more
-visible — which is what #30 is actually about.
+watching for the viewed session disappearing out of `sessions`. It covers more paths, but `sessions`
+is empty on the first render before `refresh()` resolves, so it needs a has-loaded guard to avoid
+clearing a valid selection at mount — more moving parts than the defect warrants, and it would not
+make the failed delete any more visible, which is what #30 is about.
 
 ## Success criteria
 
@@ -94,10 +104,25 @@ visible — which is what #30 is actually about.
    active recording.
 4. A selection change during an in-flight delete is not clobbered when that delete resolves.
 5. A rejected `update_session` sets the error state rather than rejecting unhandled.
-6. A previous failure's message does not survive a later successful `remove` / `update`.
+6. A `remove` / `update` failure message is cleared by that command's **own** later success, and
+   a message another subsystem wrote in the meantime is left alone.
 7. Neither `remove` nor `update` rejects to its caller any more, so no call site needs a `.catch`.
 8. Every new behaviour is mutation-tested: reverting each fix individually fails the suite.
-9. `npm run check` passes (typecheck, typecheck:node, lint, format, clippy, rustfmt, tests).
+9. `remove` returning false means nothing was applied — `activeSessionId` is untouched on the
+   refresh-failure path.
+10. A failed `list_sessions` at mount is reported rather than rejecting unhandled behind an empty
+    sidebar.
+11. A start that overtakes an in-flight delete keeps its `activeSessionId`.
+12. `npm run check` passes (typecheck, typecheck:node, lint, format, clippy, rustfmt, tests).
+
+## Deferred work
+
+Two pre-existing defects surfaced by this unit's review and correctly scoped out of it, both filed:
+
+- [#33](https://github.com/honerlaw/darric/issues/33) — overlapping `list_sessions` refreshes are
+  last-writer-wins, so a slower earlier query can resurrect a deleted row in the sidebar.
+- [#34](https://github.com/honerlaw/darric/issues/34) — the actively-recording session can be deleted
+  while its capture engine keeps running, writing transcript rows against a deleted session.
 
 ## Open Questions
 
