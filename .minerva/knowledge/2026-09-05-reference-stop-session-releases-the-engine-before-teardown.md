@@ -59,3 +59,4 @@ Four consequences, all observed:
 - [[2026-09-05-pattern-state-changed-only-in-finally-reads-as-a-dead-click]] — the UI defect that made this timing matter, and the phase that now stands in for the backend guard
 - [[2026-09-05-bug-the-session-start-guard-is-check-then-act]] — the same check-then-act shape on the start side, which `session_transition` was introduced to close
 - [[2026-09-05-decision-capture-engine-requires-a-transcriber]] — the engine's construction contract
+- [[2026-09-05-pattern-shared-state-cannot-be-cleared-for-one-reader]] — see also

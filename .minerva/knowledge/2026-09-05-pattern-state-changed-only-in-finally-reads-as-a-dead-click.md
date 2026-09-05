@@ -69,3 +69,4 @@ Two consequences that a "just show a spinner" framing misses:
 - [[2026-09-05-reference-stop-session-releases-the-engine-before-teardown]] — why the rest of the UI flattens on its own during that window, and what else the same release breaks
 - [[2026-09-05-pattern-an-early-return-can-make-a-feature-unreachable]] — the other way this app rendered a state nobody could see
 - [[2026-09-05-pattern-verifying-a-sequence-says-nothing-about-whether-it-runs]] — the same "does this actually run?" question asked of a guard rather than a render
+- [[2026-09-05-pattern-shared-state-cannot-be-cleared-for-one-reader]] — see also
