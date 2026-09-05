@@ -11,6 +11,7 @@
 ## Bugs
 
 - [[2026-09-05-bug-arc-try-unwrap-after-sharing-fails-silently]] — reclaiming ownership with `Arc::try_unwrap(x).ok()` after clones have been handed out fails deterministically, and `.ok()` turns that failure into a plausible `None` that disables the feature with no error
+- [[2026-09-05-bug-forgetting-a-block-leaked-it-and-masked-a-use-after-free]] — `mem::forget` on a block Core Audio had already `Block_copy`d leaked its whole captured environment — and because the refcount could then never reach zero, it also masked a teardown race that correcting the leak alone would have re-exposed
 - [[2026-09-05-bug-phase-progress-misreads-squash-merged-phases]] — `phasing.md` feeds `phase_progress()` from `git branch --merged`, which cannot see a squash-merged branch — so a phase that has shipped reads as pending and would be re-shipped forever
 - [[2026-09-05-bug-prettierignore-misses-generated-tauri-schemas]] — `.prettierignore` did not exclude the git-ignored `src-tauri/gen/` Tauri schemas, so `npm run format` failed locally for anyone who had run a build — while CI stayed green because it formats before those files exist
 
@@ -25,6 +26,7 @@
 
 ## References
 
+- [[2026-09-05-reference-a-core-audio-tap-starts-not-creates-under-permission]] — `AudioHardwareCreateProcessTap` succeeds without the audio-recording permission and only `AudioDeviceStart` fails, so error handling written around creation reports success on a tap that can never deliver audio
 - [[2026-09-05-reference-claude-md-symlinks-to-agents-md]] — CLAUDE.md is a symlink, not a copy — a tool that replaces rather than follows it silently forks the two agent files
 - [[2026-09-05-reference-clippy-ceiling-configured-not-enforced]] — `AGENTS.md` calls `all=deny` + pedantic + nursery + cargo "the ceiling", but only `all` and `correctness` are deny — pedantic and nursery are warn, and no lint command passes `-D warnings`, so those violations stay green
 - [[2026-09-05-reference-knowledge-corpus-not-ci-gated]] — `check.yml` runs TypeScript/Rust builds and tests only — nothing runs `knowledge_lint.py`, so index drift and broken `[[…]]` wikilinks reach `main` green
