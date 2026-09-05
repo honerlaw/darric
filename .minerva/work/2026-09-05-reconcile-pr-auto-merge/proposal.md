@@ -92,20 +92,35 @@ authored — and it is gated by a linter run the rule's author assumed CI was al
 
 ## Success criteria
 
-1. `.github/workflows/knowledge-reconcile.yml` runs `knowledge_lint.py` on the reconciled
-   corpus after the PR is opened and before any merge is attempted.
-2. A linter error fails the job with a `::error::` annotation and leaves the PR open and
+Replaced wholesale by the review — see `replan.md`, "the merge gate was scoped wrong in three
+directions".
+
+1. A `Baseline knowledge lint` step records `main`'s pre-existing lint errors before
+   `knowledge_fix.py` runs, reports them as a `::warning::`, and does not block on them.
+2. After the PR is opened, the job lints the reconciled corpus and fails **only** on error lines
+   absent from the baseline, with a `::error::` annotation naming the PR, leaving it open and
    unmerged.
-3. On a clean lint the workflow attempts `gh pr merge --auto --squash` and falls back to
-   `gh pr merge --squash` if enabling auto-merge is refused.
-4. The "nothing pending" early exit is unchanged — no PR, no lint, no merge, exit 0.
-5. The workflow still contains the literal `knowledge_fix.py`, keeping `minerva:cleanup`'s
+3. A `knowledge_lint.py` exit status greater than 1 fails the job as a crash, distinctly from a
+   lint failure.
+4. On a clean gate the job merges with `gh pr merge --squash "$PR_URL"`, and the file contains
+   no `gh pr merge --auto` invocation.
+5. After merging, the job checks out the squash commit **by oid** — not the default branch tip —
+   and lints it against the same baseline, failing with a `::error::` that states the merge
+   already landed if new errors are present.
+10. The reconciliation branch ref is unique per *attempt*, not per run, so "Re-run failed jobs"
+    cannot collide with the branch of the attempt that failed.
+11. The baseline step cannot fail the run: it clears `errexit` explicitly rather than relying on
+    `set -uo pipefail` to do so.
+6. The "nothing pending" early exit is unchanged — no PR, no gate, no merge, exit 0.
+7. The workflow still contains the literal `knowledge_fix.py`, keeping `minerva:cleanup`'s
    stand-down grep matching.
-6. `actionlint`-clean and `set -euo pipefail`-safe: no unguarded non-zero exit turns a
-   successful reconciliation red.
+8. The workflow parses as YAML, every step's script body is `bash -n`-clean, and no unguarded
+   non-zero exit turns a successful reconciliation red.
+9. No comment in the file asserts that `check.yml` does not run the linter, or that a post-fix
+   corpus is warning-free.
 
 ## Open Questions
 
-None blocking. One that only a live run can settle: whether GitHub accepts
-`--auto` on these PRs or refuses it as clean. Both outcomes end with the PR merged, which is
-why the fallback exists rather than a prediction.
+None blocking. The original open question — whether GitHub would accept `--auto` on a check-less
+PR or refuse it as clean — was dissolved rather than answered: `--auto` is gone, because on this
+PR type "accepted" is the worse of the two outcomes.

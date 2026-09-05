@@ -41,3 +41,7 @@ ggml-*.bin
 
 # minerva work-unit worktrees
 .minerva/worktrees/
+
+# Where CI checks out the pinned minerva tooling (check.yml, knowledge-reconcile.yml).
+# Committing it would abort knowledge-reconcile.yml's post-merge checkout.
+.minerva-tools/
