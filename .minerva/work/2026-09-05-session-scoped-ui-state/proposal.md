@@ -1,7 +1,7 @@
 # Proposal: session-scoped-ui-state
 
 **Date**: 2026-09-05
-**Status**: Draft
+**Status**: Shipped (2026-09-05)
 **Closes**: #21, #22, #23
 
 ## Goal
@@ -38,11 +38,18 @@ whichever session is now selected.
 **Give each piece of state an explicit owner, and check it at the point of display.** Three
 independent fixes, one shared principle.
 
-1. **`stop()` releases the session (#21).** `setActiveSessionId(null)` joins the `finally` beside
-   `setIsRecording(false)`. Safe because every consumer of `activeSessionId` is already gated on
-   `isRecording`, which is false by then: the pane's `isRecording`/`isStopping` props, the
-   pin-to-active effect, and `useTranscript`'s `isLive` all read false either way. `RecordingList`
-   is the only consumer that reads it *un*gated, which is precisely the bug.
+1. **The dot is gated at the point of display (#21).** `activeId={isRecording && !isStopping ?
+activeSessionId : null}`, matching the three sibling readers that already check `isStopping`.
+
+   `activeSessionId` is **not** cleared on stop, and its declaration now says why: it means "the
+   most recently active recording" and deliberately outlives the recording, because the
+   dropped-segment warning is attributed with it after `isRecording` goes false. The original
+   plan _did_ clear it and an existing test caught the contradiction immediately — see
+   `replan.md` and [[2026-09-05-pattern-shared-state-cannot-be-cleared-for-one-reader]].
+
+   Two further consequences of that lifetime, both found in review: `droppedSegments` is reset
+   when `activeSessionId` changes (keyed on the session, so resuming the _same_ recording keeps
+   its warning), and the dot's gate needed `!isStopping` rather than `isRecording` alone.
 
 2. **A `startingSessionId` names what is starting (#22).** The obvious fix — reusing
    `viewingSessionId === activeSessionId` — is wrong, and the issue says so: during a start
@@ -53,9 +60,16 @@ independent fixes, one shared principle.
 viewingSessionId === startingSessionId}`. A fresh start shows "Starting…" in the header only,
    which is correct — there is no session for the pane to describe yet.
 
-3. **The `transcript_chunk` event carries its `session_id` (#23).** `persist_and_emit` already
-   has the id in scope; it is one field. `useTranscript` then drops any chunk whose `session_id`
-   is not the session being displayed.
+3. **Both paths into the transcript pane attribute their data (#23).** The
+   `transcript_chunk` event carries its `session_id` — `persist_and_emit` already had the id in
+   scope, and the payload is now built by a `chunk_payload` function extracted so the wire
+   contract is reachable from a Rust test without an `AppHandle`. `useTranscript` drops any chunk
+   whose `session_id` is not the session displayed.
+
+   The initial `getSessionTranscript` query needed the same guard and did not have it: a slow
+   fetch for a deselected session overwrote the pane that replaced it — the identical wrong
+   screen, reached by query instead of by event. Not in the original plan; found in review, see
+   `replan.md` and [[2026-09-05-pattern-fixing-one-path-leaves-the-other-one-open]].
 
    The frontend-only alternative — capturing the session id when the linger listener attaches —
    **does not work**, and this is worth recording because it looks like it does. The `[sessionId]`
@@ -83,6 +97,14 @@ viewingSessionId === startingSessionId}`. A fresh start shows "Starting…" in t
 7. Every new behaviour is mutation-tested: reverting each fix individually fails the suite.
 8. `npm run check` passes (typecheck, typecheck:node, lint, format, clippy, rustfmt, tests).
 
+## Deferred work
+
+None. Every finding this unit's review raised was fixed in it; nothing was filed.
+
 ## Open Questions
 
-None. All three diagnoses were written against the code when the issues were filed.
+None outstanding. Two standing facts were noted and deliberately not acted on: `isStarting`
+carries the same last-writer-wins flaw across overlapping resumes that `startingSessionId` was
+given a guard for (pre-existing, and the guard closes the case that matters), and the
+`isStarting` / `startingSessionId` pair could be a single discriminated union — worth doing only
+if a third piece of start state appears.
