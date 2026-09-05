@@ -67,3 +67,4 @@ display: `activeId={isRecording && !isStopping ? activeSessionId : null}`.
 - [[2026-09-05-pattern-state-changed-only-in-finally-reads-as-a-dead-click]] — the previous unit, whose "audit every consumer of the flag you split" implication this is a second instance of
 - [[2026-09-05-reference-stop-session-releases-the-engine-before-teardown]] — why the drop warning has to outlive its recording at all
 - [[2026-09-05-pattern-ui-rewrites-drop-state-guards-not-markup]] — the same class of cross-entity guard, lost rather than overloaded
+- [[2026-09-05-pattern-fixing-one-path-leaves-the-other-one-open]] — see also

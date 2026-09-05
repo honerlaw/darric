@@ -53,3 +53,4 @@ rendered from `App`, above the pane, where the state it displays actually lives.
 - [[2026-09-05-decision-strip-darric-to-a-recorder]] — the rewrite that produced the misplaced mount
 - [[2026-09-05-constraint-tauri-events-from-setup-reach-no-webview]] — see also
 - [[2026-09-05-pattern-state-changed-only-in-finally-reads-as-a-dead-click]] — see also
+- [[2026-09-05-pattern-fixing-one-path-leaves-the-other-one-open]] — see also

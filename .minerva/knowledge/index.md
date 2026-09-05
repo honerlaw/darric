@@ -22,6 +22,8 @@
 ## Patterns
 
 - [[2026-09-05-pattern-an-early-return-can-make-a-feature-unreachable]] — the model-download indicator was complete and correct but rendered below a `session === null` early return, so it could not run in the only state it existed for
+- [[2026-09-05-pattern-fixing-one-path-leaves-the-other-one-open]] — transcript lines could land under the wrong recording via a broadcast event _and_ via a slow initial query; the unit fixed the event path the issue named, and review found the query path producing the identical wrong screen
+- [[2026-09-05-pattern-shared-state-cannot-be-cleared-for-one-reader]] — `activeSessionId` answered both "which recording is live right now" and "which recording does this post-stop state belong to"; clearing it to fix the first silently destroyed the second, and the fix was to gate the display rather than the state
 - [[2026-09-05-pattern-state-changed-only-in-finally-reads-as-a-dead-click]] — `stop()` awaited a multi-second Tauri command and mutated every piece of UI state in its `finally`, so for the whole call the app rendered exactly as it had while recording — and the button stayed live, so a second press hit a non-idempotent command
 - [[2026-09-05-pattern-ui-rewrites-drop-state-guards-not-markup]] — rewriting a screen from its rendered shape carries the visible markup across but loses per-selection state resets and cross-entity guards — the parts with no visual counterpart
 - [[2026-09-05-pattern-verifying-a-sequence-says-nothing-about-whether-it-runs]] — a completion check confirmed the flush/shutdown ordering inside `stop()` was correct, and it was — but the `if let Some(pool)` guard above it was never true, so none of the verified steps executed
