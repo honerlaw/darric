@@ -49,7 +49,9 @@ export function useConversation(): UseConversationReturn {
       .catch((err: unknown) => {
         console.error("[chat] failed to load history:", err);
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Register streaming event listeners once

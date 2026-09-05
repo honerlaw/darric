@@ -15,7 +15,7 @@ function renderMarkdown(md: string): string {
 function NoteBody({ html, onEdit }: { html: string; onEdit: () => void }): React.JSX.Element {
   return (
     <div
-      className="note-lede cursor-pointer font-sans text-[16px] leading-[1.7] text-ink [&_p]:mb-[18px] [&_ul]:mb-[18px] [&_ul]:list-disc [&_ul]:pl-[22px] [&_ol]:mb-[18px] [&_ol]:list-decimal [&_ol]:pl-[22px] [&_strong]:font-[600] [&_em]:italic"
+      className="note-lede cursor-pointer font-sans text-[16px] leading-[1.7] text-ink [&_em]:italic [&_ol]:mb-[18px] [&_ol]:list-decimal [&_ol]:pl-[22px] [&_p]:mb-[18px] [&_strong]:font-[600] [&_ul]:mb-[18px] [&_ul]:list-disc [&_ul]:pl-[22px]"
       onClick={onEdit}
       dangerouslySetInnerHTML={{ __html: html }}
     />
@@ -33,7 +33,15 @@ interface NoteModalProps {
   onRemoveTag: (noteId: string, tagId: string) => void;
 }
 
-export function NoteModal({ note, allTags, onUpdate, onDelete, onClose, onAddTag, onRemoveTag }: NoteModalProps): React.JSX.Element {
+export function NoteModal({
+  note,
+  allTags,
+  onUpdate,
+  onDelete,
+  onClose,
+  onAddTag,
+  onRemoveTag,
+}: NoteModalProps): React.JSX.Element {
   const [editing, setEditing] = useState(note.title.length === 0 && note.body.length === 0);
   const [editTitle, setEditTitle] = useState(note.title);
   const [editBody, setEditBody] = useState(note.body);
@@ -80,8 +88,10 @@ export function NoteModal({ note, allTags, onUpdate, onDelete, onClose, onAddTag
       if (e.key === "Escape") handleClose();
     };
     window.addEventListener("keydown", handler);
-    return () => { window.removeEventListener("keydown", handler); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      window.removeEventListener("keydown", handler);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editTitle, editBody]);
 
   return (
@@ -93,24 +103,28 @@ export function NoteModal({ note, allTags, onUpdate, onDelete, onClose, onAddTag
       }}
     >
       {/* Panel */}
-      <div className="relative flex w-[760px] max-h-[82vh] flex-col rounded-[14px] bg-paper shadow-[0_8px_32px_rgba(10,10,10,0.14)]">
+      <div className="relative flex max-h-[82vh] w-[760px] flex-col rounded-[14px] bg-paper shadow-[0_8px_32px_rgba(10,10,10,0.14)]">
         {/* Top bar */}
         <div className="flex shrink-0 items-center justify-between border-b border-line px-8 py-4">
-          <span className="font-mono text-[11px] uppercase tracking-eyebrow text-accent">Note</span>
+          <span className="font-mono text-[11px] tracking-eyebrow text-accent uppercase">Note</span>
           <div className="flex items-center gap-4">
             {confirmDelete ? (
               <div className="flex items-center gap-2">
                 <span className="text-[12px] text-ink-3">Delete this note?</span>
                 <button
                   type="button"
-                  onClick={() => { void handleDelete(); }}
+                  onClick={() => {
+                    void handleDelete();
+                  }}
                   className="cursor-pointer text-[12px] text-danger hover:underline"
                 >
                   Yes, delete
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setConfirmDelete(false); }}
+                  onClick={() => {
+                    setConfirmDelete(false);
+                  }}
                   className="cursor-pointer text-[12px] text-ink-3 hover:underline"
                 >
                   Cancel
@@ -119,8 +133,10 @@ export function NoteModal({ note, allTags, onUpdate, onDelete, onClose, onAddTag
             ) : (
               <button
                 type="button"
-                onClick={() => { setConfirmDelete(true); }}
-                className="cursor-pointer font-mono text-[11px] text-ink-4 hover:text-danger transition-colors"
+                onClick={() => {
+                  setConfirmDelete(true);
+                }}
+                className="cursor-pointer font-mono text-[11px] text-ink-4 transition-colors hover:text-danger"
               >
                 Delete
               </button>
@@ -128,7 +144,7 @@ export function NoteModal({ note, allTags, onUpdate, onDelete, onClose, onAddTag
             <button
               type="button"
               onClick={handleClose}
-              className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-ink-3 hover:bg-paper-sunken hover:text-ink transition-colors text-[16px] leading-none"
+              className="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full text-[16px] leading-none text-ink-3 transition-colors hover:bg-paper-sunken hover:text-ink"
               aria-label="Close"
             >
               ×
@@ -137,7 +153,7 @@ export function NoteModal({ note, allTags, onUpdate, onDelete, onClose, onAddTag
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-8 py-6 flex flex-col gap-5">
+        <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-8 py-6">
           {editing ? (
             <>
               <input
@@ -148,9 +164,11 @@ export function NoteModal({ note, allTags, onUpdate, onDelete, onClose, onAddTag
                   setEditTitle(e.target.value);
                   autosave(e.target.value, editBody);
                 }}
-                onBlur={() => { if (editBody.length > 0) setEditing(false); }}
+                onBlur={() => {
+                  if (editBody.length > 0) setEditing(false);
+                }}
                 placeholder="Title"
-                className="mb-4 w-full bg-transparent font-sans text-[36px] font-[500] tracking-[-0.024em] leading-[1.1] text-ink outline-none placeholder-ink-4"
+                className="mb-4 w-full bg-transparent font-sans text-[36px] leading-[1.1] font-[500] tracking-[-0.024em] text-ink placeholder-ink-4 outline-none"
               />
               <textarea
                 value={editBody}
@@ -159,23 +177,32 @@ export function NoteModal({ note, allTags, onUpdate, onDelete, onClose, onAddTag
                   autosave(editTitle, e.target.value);
                 }}
                 placeholder="Write in markdown…"
-                className="min-h-[260px] w-full resize-none bg-transparent font-sans text-[16px] leading-[1.7] text-ink outline-none placeholder-ink-4"
+                className="min-h-[260px] w-full resize-none bg-transparent font-sans text-[16px] leading-[1.7] text-ink placeholder-ink-4 outline-none"
               />
             </>
           ) : (
             <>
               <h2
-                className="mb-4 cursor-pointer font-sans text-[36px] font-[500] tracking-[-0.024em] leading-[1.1] text-ink"
-                onClick={() => { setEditing(true); }}
+                className="mb-4 cursor-pointer font-sans text-[36px] leading-[1.1] font-[500] tracking-[-0.024em] text-ink"
+                onClick={() => {
+                  setEditing(true);
+                }}
               >
                 {editTitle.length > 0 ? editTitle : "Untitled"}
               </h2>
               {editBody.length > 0 ? (
-                <NoteBody html={renderMarkdown(editBody)} onEdit={() => { setEditing(true); }} />
+                <NoteBody
+                  html={renderMarkdown(editBody)}
+                  onEdit={() => {
+                    setEditing(true);
+                  }}
+                />
               ) : (
                 <div
-                  className="cursor-pointer py-4 text-[15px] italic text-ink-4"
-                  onClick={() => { setEditing(true); }}
+                  className="cursor-pointer py-4 text-[15px] text-ink-4 italic"
+                  onClick={() => {
+                    setEditing(true);
+                  }}
                 >
                   Click to add content…
                 </div>
@@ -188,22 +215,26 @@ export function NoteModal({ note, allTags, onUpdate, onDelete, onClose, onAddTag
             <TagInput
               tags={note.tags}
               allTags={allTags}
-              onAdd={(name) => { onAddTag(note.id, name); }}
-              onRemove={(tagId) => { onRemoveTag(note.id, tagId); }}
+              onAdd={(name) => {
+                onAddTag(note.id, name);
+              }}
+              onRemove={(tagId) => {
+                onRemoveTag(note.id, tagId);
+              }}
             />
           </div>
         </div>
 
         {/* Footer */}
         {editing && (
-          <div className="shrink-0 flex items-center justify-end border-t border-line px-8 py-3">
+          <div className="flex shrink-0 items-center justify-end border-t border-line px-8 py-3">
             <button
               type="button"
               onClick={() => {
                 flushSave();
                 setEditing(false);
               }}
-              className="cursor-pointer rounded-[8px] bg-accent px-4 py-2 text-[13px] font-[500] text-accent-fg hover:bg-accent-hover transition-colors"
+              className="cursor-pointer rounded-[8px] bg-accent px-4 py-2 text-[13px] font-[500] text-accent-fg transition-colors hover:bg-accent-hover"
             >
               Done
             </button>

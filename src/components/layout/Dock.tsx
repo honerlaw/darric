@@ -34,9 +34,8 @@ export function Dock({ activeScreen, onSubmit, onOpenSettings }: DockProps): Rea
         getSetting("ai.gemini.api_key"),
       ]);
       const activeProvider = provider ?? "claude";
-      const hasKey = activeProvider === "claude"
-        ? (claudeKey ?? "").length > 0
-        : (geminiKey ?? "").length > 0;
+      const hasKey =
+        activeProvider === "claude" ? (claudeKey ?? "").length > 0 : (geminiKey ?? "").length > 0;
       if (!hasKey) {
         inputRef.current?.blur();
         onOpenSettings();

@@ -12,7 +12,8 @@ const SPEAKER_COLORS: Record<number, string> = {
 };
 
 function speakerColor(label: string | undefined): string {
-  if (label === undefined || label === "") return "bg-neutral-700/40 text-neutral-400 ring-neutral-600/30";
+  if (label === undefined || label === "")
+    return "bg-neutral-700/40 text-neutral-400 ring-neutral-600/30";
   const num = parseInt(label.replace("Speaker ", ""), 10);
   return SPEAKER_COLORS[(num - 1) % 5] ?? "bg-blue-500/20 text-blue-300 ring-blue-500/30";
 }
@@ -62,8 +63,18 @@ function todayShort(): string {
   const d = new Date();
   const days = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
   const months = [
-    "jan", "feb", "mar", "apr", "may", "jun",
-    "jul", "aug", "sep", "oct", "nov", "dec",
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "may",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "oct",
+    "nov",
+    "dec",
   ];
   const day = days[d.getDay()] ?? "?";
   const month = months[d.getMonth()] ?? "?";
@@ -125,31 +136,44 @@ export function MeetingScreen({
     <div className="flex flex-1 overflow-hidden">
       {/* ── Left: Notes pane ─────────────────────────────────────────── */}
       <div className="flex flex-[1.3] flex-col overflow-hidden border-r border-line">
-        <div className="px-10 pt-8 pb-0 shrink-0">
-          <div className="font-mono text-[11px] uppercase tracking-eyebrow text-accent mb-2">
+        <div className="shrink-0 px-10 pt-8 pb-0">
+          <div className="mb-2 font-mono text-[11px] tracking-eyebrow text-accent uppercase">
             Meeting
           </div>
           {editingTitle ? (
             <input
               autoFocus
               value={titleDraft}
-              onChange={(e) => { setTitleDraft(e.target.value); }}
-              onBlur={() => { if (titleDraft.trim() !== "") onUpdateTitle(titleDraft); setEditingTitle(false); }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") { if (titleDraft.trim() !== "") onUpdateTitle(titleDraft); setEditingTitle(false); }
-                if (e.key === "Escape") { setEditingTitle(false); }
+              onChange={(e) => {
+                setTitleDraft(e.target.value);
               }}
-              className="font-sans text-[32px] font-[500] tracking-[-0.022em] leading-tight text-ink bg-transparent border-b border-accent outline-none w-full"
+              onBlur={() => {
+                if (titleDraft.trim() !== "") onUpdateTitle(titleDraft);
+                setEditingTitle(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  if (titleDraft.trim() !== "") onUpdateTitle(titleDraft);
+                  setEditingTitle(false);
+                }
+                if (e.key === "Escape") {
+                  setEditingTitle(false);
+                }
+              }}
+              className="w-full border-b border-accent bg-transparent font-sans text-[32px] leading-tight font-[500] tracking-[-0.022em] text-ink outline-none"
             />
           ) : (
             <h2
-              className="font-sans text-[32px] font-[500] tracking-[-0.022em] leading-tight text-ink cursor-text"
-              onClick={() => { setTitleDraft(sessionTopic ?? ""); setEditingTitle(true); }}
+              className="cursor-text font-sans text-[32px] leading-tight font-[500] tracking-[-0.022em] text-ink"
+              onClick={() => {
+                setTitleDraft(sessionTopic ?? "");
+                setEditingTitle(true);
+              }}
             >
               {sessionTopic !== null && sessionTopic.length > 0 ? sessionTopic : "Untitled meeting"}
             </h2>
           )}
-          <div className="font-mono text-[12px] text-ink-3 mt-2 mb-3">
+          <div className="mt-2 mb-3 font-mono text-[12px] text-ink-3">
             {todayShort()} · started {startedStr}
           </div>
 
@@ -170,19 +194,21 @@ export function MeetingScreen({
               const value = e.target.value;
               setNotes(value);
               if (saveTimerRef.current !== null) clearTimeout(saveTimerRef.current);
-              saveTimerRef.current = setTimeout(() => { onSaveNotes(value); }, 500);
+              saveTimerRef.current = setTimeout(() => {
+                onSaveNotes(value);
+              }, 500);
             }}
             placeholder="Type your notes here…"
             className="h-full w-full resize-none bg-transparent font-sans text-[16px] leading-[1.7] text-ink placeholder-ink-4 outline-none"
           />
         </div>
 
-        <div className="shrink-0 flex items-center gap-3 px-10 py-5 border-t border-line">
+        <div className="flex shrink-0 items-center gap-3 border-t border-line px-10 py-5">
           {isRecording && (
             <button
               type="button"
               onClick={onStop}
-              className="rounded-[8px] bg-accent px-4 py-2 text-[13px] font-[500] text-accent-fg hover:bg-accent-hover transition-colors cursor-pointer"
+              className="cursor-pointer rounded-[8px] bg-accent px-4 py-2 text-[13px] font-[500] text-accent-fg transition-colors hover:bg-accent-hover"
             >
               End meeting
             </button>
@@ -191,7 +217,7 @@ export function MeetingScreen({
             <button
               type="button"
               onClick={onResume}
-              className="rounded-[8px] bg-accent px-4 py-2 text-[13px] font-[500] text-accent-fg hover:bg-accent-hover transition-colors cursor-pointer"
+              className="cursor-pointer rounded-[8px] bg-accent px-4 py-2 text-[13px] font-[500] text-accent-fg transition-colors hover:bg-accent-hover"
             >
               Resume recording
             </button>
@@ -204,21 +230,21 @@ export function MeetingScreen({
 
       {/* ── Right: Transcript pane ───────────────────────────────────── */}
       <div className="flex flex-1 flex-col overflow-hidden bg-accent-tint">
-        <div className="px-8 pt-8 pb-1.5 shrink-0">
-          <div className="font-mono text-[11px] uppercase tracking-eyebrow text-accent mb-2">
+        <div className="shrink-0 px-8 pt-8 pb-1.5">
+          <div className="mb-2 font-mono text-[11px] tracking-eyebrow text-accent uppercase">
             Transcript
           </div>
           <div className="font-sans text-[22px] font-[500] text-ink">
             {isRecording ? "Live" : "Ended"}
           </div>
-          <div className="font-mono text-[12px] text-ink-3 mt-1">
+          <div className="mt-1 font-mono text-[12px] text-ink-3">
             recorded by Darric · {formatElapsed(elapsedSeconds)} elapsed
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto px-8 py-4">
           {transcriptLines.length === 0 ? (
-            <div className="py-8 text-[14px] italic text-ink-4">
+            <div className="py-8 text-[14px] text-ink-4 italic">
               Transcript will appear here as you speak…
             </div>
           ) : (
@@ -231,7 +257,7 @@ export function MeetingScreen({
                     className="grid gap-x-[14px]"
                     style={{ gridTemplateColumns: "52px 32px 1fr" }}
                   >
-                    <span className="font-mono text-[11px] text-ink-3 pt-[3px]">
+                    <span className="pt-[3px] font-mono text-[11px] text-ink-3">
                       {fmtTimestamp(line.recorded_at)}
                     </span>
                     <span
@@ -239,7 +265,7 @@ export function MeetingScreen({
                     >
                       {speakerShort(line.speaker_label)}
                     </span>
-                    <p className="font-sans text-[15px] italic leading-[1.6] text-ink-2">
+                    <p className="font-sans text-[15px] leading-[1.6] text-ink-2 italic">
                       {line.content}
                       {isLast && isRecording && (
                         <span className="caret-blink ml-[2px] text-accent">▍</span>

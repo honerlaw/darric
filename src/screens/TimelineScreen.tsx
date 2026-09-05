@@ -31,8 +31,18 @@ const COL_LABEL: Record<string, string> = {
 
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTH_NAMES = [
-  "january", "february", "march", "april", "may", "june",
-  "july", "august", "september", "october", "november", "december",
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
 ];
 
 function buildTimeline(
@@ -218,7 +228,8 @@ function buildTagTimeline(
 
 function applyFilter(entries: TimelineEntry[], filter: FilterKey): TimelineEntry[] {
   if (filter === "all") return entries;
-  if (filter === "darric") return entries.filter((e) => e.kind === "you-asked-darric" || e.kind === "darric");
+  if (filter === "darric")
+    return entries.filter((e) => e.kind === "you-asked-darric" || e.kind === "darric");
   return entries.filter((e) => e.kind === filter);
 }
 
@@ -233,7 +244,11 @@ function kindLabel(entry: TimelineEntry): string {
 }
 
 const RANGE_DAYS: Partial<Record<RangeMode, number>> = {
-  "3d": 3, "7d": 7, "14d": 14, "30d": 30, "60d": 60,
+  "3d": 3,
+  "7d": 7,
+  "14d": 14,
+  "30d": 30,
+  "60d": 60,
 };
 
 function rangeModeStartDate(mode: RangeMode): Date | null {
@@ -262,19 +277,21 @@ interface TagSelectorProps {
 function TagSelector({ allTags, activeTag, onSelect }: TagSelectorProps): React.JSX.Element | null {
   if (allTags.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-[6px] mb-5">
-      <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-ink-4 mr-1">tags</span>
+    <div className="mb-5 flex flex-wrap items-center gap-[6px]">
+      <span className="mr-1 font-mono text-[10px] tracking-[0.08em] text-ink-4 uppercase">
+        tags
+      </span>
       {allTags.map((tag) => {
         const isActive = activeTag?.id === tag.id;
         return (
           <button
             key={tag.id}
             type="button"
-            onClick={() => { onSelect(isActive ? null : tag); }}
-            className={`rounded-full px-[9px] py-[2px] font-mono text-[10px] tracking-[0.04em] cursor-pointer transition-colors ${
-              isActive
-                ? "bg-accent text-accent-fg"
-                : "bg-accent/10 text-accent hover:bg-accent/20"
+            onClick={() => {
+              onSelect(isActive ? null : tag);
+            }}
+            className={`cursor-pointer rounded-full px-[9px] py-[2px] font-mono text-[10px] tracking-[0.04em] transition-colors ${
+              isActive ? "bg-accent text-accent-fg" : "bg-accent/10 text-accent hover:bg-accent/20"
             }`}
           >
             {tag.name}
@@ -284,8 +301,10 @@ function TagSelector({ allTags, activeTag, onSelect }: TagSelectorProps): React.
       {activeTag !== null && (
         <button
           type="button"
-          onClick={() => { onSelect(null); }}
-          className="font-mono text-[10px] text-ink-4 hover:text-ink cursor-pointer transition-colors"
+          onClick={() => {
+            onSelect(null);
+          }}
+          className="cursor-pointer font-mono text-[10px] text-ink-4 transition-colors hover:text-ink"
         >
           × clear
         </button>
@@ -318,8 +337,10 @@ function ViewModeBar({
         <button
           key={m.key}
           type="button"
-          onClick={() => { onChange(m.key); }}
-          className={`font-mono text-[11px] tracking-[0.06em] cursor-pointer transition-colors ${
+          onClick={() => {
+            onChange(m.key);
+          }}
+          className={`cursor-pointer font-mono text-[11px] tracking-[0.06em] transition-colors ${
             active === m.key
               ? "text-ink underline underline-offset-[3px]"
               : "text-ink-3 hover:text-ink-2"
@@ -357,7 +378,7 @@ function FilterBar({ allEntries, active, onChange }: FilterBarProps): React.JSX.
   );
 
   return (
-    <div className="flex flex-wrap gap-x-5 gap-y-1 mb-6">
+    <div className="mb-6 flex flex-wrap gap-x-5 gap-y-1">
       {visible.map((f) => {
         const count = countForFilter(allEntries, f.key);
         const isActive = active === f.key;
@@ -365,11 +386,11 @@ function FilterBar({ allEntries, active, onChange }: FilterBarProps): React.JSX.
           <button
             key={f.key}
             type="button"
-            onClick={() => { onChange(f.key); }}
-            className={`font-mono text-[11px] tracking-[0.06em] cursor-pointer transition-colors ${
-              isActive
-                ? "text-ink underline underline-offset-[3px]"
-                : "text-ink-3 hover:text-ink-2"
+            onClick={() => {
+              onChange(f.key);
+            }}
+            className={`cursor-pointer font-mono text-[11px] tracking-[0.06em] transition-colors ${
+              isActive ? "text-ink underline underline-offset-[3px]" : "text-ink-3 hover:text-ink-2"
             }`}
           >
             {f.label} · {String(count)}
@@ -383,7 +404,7 @@ function FilterBar({ allEntries, active, onChange }: FilterBarProps): React.JSX.
 /* ── Day header (range mode) ─────────────────────────────────────────── */
 function DayHeader({ label }: { label: string }): React.JSX.Element {
   return (
-    <div className="pt-8 pb-2 font-mono text-[11px] uppercase tracking-[0.06em] text-ink-3 border-b border-line">
+    <div className="border-b border-line pt-8 pb-2 font-mono text-[11px] tracking-[0.06em] text-ink-3 uppercase">
       {label}
     </div>
   );
@@ -424,17 +445,19 @@ function EntryRow({
   };
 
   return (
-    <div className={`group grid gap-x-[22px] py-[18px] [grid-template-columns:56px_1fr] ${showBorder ? "border-b border-line" : ""}`}>
-      <div className="font-mono text-[11px] text-ink-4 pt-[2px]">{fmtTime(entry.timestamp)}</div>
+    <div
+      className={`group grid [grid-template-columns:56px_1fr] gap-x-[22px] py-[18px] ${showBorder ? "border-b border-line" : ""}`}
+    >
+      <div className="pt-[2px] font-mono text-[11px] text-ink-4">{fmtTime(entry.timestamp)}</div>
 
       <div className="flex items-start gap-3">
         <div
-          className={`flex-1 min-w-0 ${clickable && !isConfirming ? "cursor-pointer" : ""}`}
+          className={`min-w-0 flex-1 ${clickable && !isConfirming ? "cursor-pointer" : ""}`}
           onClick={handleClick}
         >
           <div
             className={`mb-[3px] font-mono text-[11px] tracking-[0.06em] ${
-              isDarric ? "italic text-accent" : "text-ink-3"
+              isDarric ? "text-accent italic" : "text-ink-3"
             }`}
           >
             {kindLabel(entry)}
@@ -442,9 +465,9 @@ function EntryRow({
 
           {entry.title !== undefined && (
             <div
-              className={`text-[18px] tracking-tight leading-snug ${
+              className={`text-[18px] leading-snug tracking-tight ${
                 isYouAsked
-                  ? "italic font-[400] text-ink-2"
+                  ? "font-[400] text-ink-2 italic"
                   : `font-[400] text-ink ${clickable && !isConfirming ? "group-hover:text-ink-2" : ""}`
               }`}
             >
@@ -455,12 +478,12 @@ function EntryRow({
           {(entry.body !== undefined || entry.isStreaming === true) && (
             <div
               className={`mt-[4px] text-[15px] leading-[1.6] text-ink-2 ${
-                isDarric ? "italic border-l-[2px] border-accent pl-[14px] mt-[8px]" : ""
+                isDarric ? "mt-[8px] border-l-[2px] border-accent pl-[14px] italic" : ""
               }`}
             >
               {entry.body}
               {entry.isStreaming === true && (
-                <span className="ml-[2px] inline-block w-[2px] h-[1em] bg-accent align-middle animate-[blink_1s_step-end_infinite]" />
+                <span className="ml-[2px] inline-block h-[1em] w-[2px] animate-[blink_1s_step-end_infinite] bg-accent align-middle" />
               )}
             </div>
           )}
@@ -587,13 +610,17 @@ export function TimelineScreen({
   const isTagMode = activeTag !== null;
 
   /* ── Tag mode data ── */
-  const tagAllEntries = isTagMode
-    ? buildTagTimeline(sessions, notes, tasks, activeTag.id)
-    : [];
+  const tagAllEntries = isTagMode ? buildTagTimeline(sessions, notes, tasks, activeTag.id) : [];
   const tagEntries = applyFilter(tagAllEntries, activeFilter);
 
   /* ── Day mode data ── */
-  const dayAllEntries = buildTimeline(sessions, notes, tasks, agentEntries, selectedDate.toDateString());
+  const dayAllEntries = buildTimeline(
+    sessions,
+    notes,
+    tasks,
+    agentEntries,
+    selectedDate.toDateString(),
+  );
   const dayEntries = applyFilter(dayAllEntries, activeFilter);
 
   /* ── Range mode data ── */
@@ -629,7 +656,9 @@ export function TimelineScreen({
 
   let dayEmptyText: string;
   if (activeFilter === "all") {
-    dayEmptyText = isToday ? "Nothing here yet — start recording or add a note." : "Nothing logged that day.";
+    dayEmptyText = isToday
+      ? "Nothing here yet — start recording or add a note."
+      : "Nothing logged that day.";
   } else {
     const when = isToday ? "today" : "that day";
     dayEmptyText = `No ${filterLabel} entries ${when}.`;
@@ -637,7 +666,8 @@ export function TimelineScreen({
 
   let rangeEmptyText: string;
   if (activeFilter === "all") {
-    rangeEmptyText = rangeMode === "all" ? "Nothing logged yet." : `Nothing logged in the ${rangeModeStr}.`;
+    rangeEmptyText =
+      rangeMode === "all" ? "Nothing logged yet." : `Nothing logged in the ${rangeModeStr}.`;
   } else {
     rangeEmptyText = `No ${filterLabel} entries in the ${rangeModeStr}.`;
   }
@@ -657,26 +687,31 @@ export function TimelineScreen({
   return (
     <div ref={scrollRef} className="flex-1 overflow-y-auto">
       <div className="mx-auto max-w-[760px] px-8 py-10">
-
         {/* Tag selector — always visible when tags exist */}
         <TagSelector allTags={allTags} activeTag={activeTag} onSelect={handleSelectTag} />
 
         {isTagMode ? (
           /* ── Tag mode ─────────────────────────────────────────────── */
           <>
-            <div className="font-mono text-[11px] uppercase tracking-eyebrow text-accent mb-2">Tagged</div>
-            <h1 className="font-sans text-[56px] font-[500] tracking-[-0.03em] leading-none text-ink">
+            <div className="mb-2 font-mono text-[11px] tracking-eyebrow text-accent uppercase">
+              Tagged
+            </div>
+            <h1 className="font-sans text-[56px] leading-none font-[500] tracking-[-0.03em] text-ink">
               {activeTag.name}
             </h1>
-            <div className="font-mono text-[13px] text-ink-3 mt-2 mb-6">
+            <div className="mt-2 mb-6 font-mono text-[13px] text-ink-3">
               {String(tagEntryCount)} {tagEntryCount === 1 ? "entry" : "entries"} · all time
             </div>
 
-            <FilterBar allEntries={tagAllEntries} active={activeFilter} onChange={setActiveFilter} />
+            <FilterBar
+              allEntries={tagAllEntries}
+              active={activeFilter}
+              onChange={setActiveFilter}
+            />
             <div className="border-t border-line" />
 
             {tagEntries.length === 0 ? (
-              <div className="py-16 text-center text-[15px] italic text-ink-4">
+              <div className="py-16 text-center text-[15px] text-ink-4 italic">
                 {activeFilter === "all"
                   ? `No entries tagged "${activeTag.name}".`
                   : `No ${activeFilter} entries tagged "${activeTag.name}".`}
@@ -688,11 +723,21 @@ export function TimelineScreen({
                     key={entry.id}
                     entry={entry}
                     isConfirming={confirmingId === entry.id}
-                    onClickNote={(id) => { onNavigateNotes(id); }}
-                    onClickMeeting={(id) => { onNavigateMeeting(id); }}
-                    onDeleteRequest={() => { setConfirmingId(entry.id); }}
-                    onDeleteConfirm={() => { handleConfirmDelete(entry); }}
-                    onDeleteCancel={() => { setConfirmingId(null); }}
+                    onClickNote={(id) => {
+                      onNavigateNotes(id);
+                    }}
+                    onClickMeeting={(id) => {
+                      onNavigateMeeting(id);
+                    }}
+                    onDeleteRequest={() => {
+                      setConfirmingId(entry.id);
+                    }}
+                    onDeleteConfirm={() => {
+                      handleConfirmDelete(entry);
+                    }}
+                    onDeleteCancel={() => {
+                      setConfirmingId(null);
+                    }}
                   />
                 ))}
               </div>
@@ -701,123 +746,148 @@ export function TimelineScreen({
         ) : (
           /* ── Day / range mode ─────────────────────────────────────── */
           <>
-        {/* View mode selector */}
-        <div className="mb-6">
-          <ViewModeBar active={rangeMode} onChange={handleRangeModeChange} />
-        </div>
-
-        {/* Header */}
-        {!isRangeMode ? (
-          <>
-            <div className="flex items-center gap-3 mb-2">
-              <button
-                type="button"
-                onClick={prevDay}
-                className="font-mono text-[11px] text-ink-3 hover:text-ink cursor-pointer select-none"
-                aria-label="Previous day"
-              >←</button>
-              <div className="font-mono text-[11px] uppercase tracking-eyebrow text-accent">
-                {eyebrowLabel}
-              </div>
-              <button
-                type="button"
-                onClick={nextDay}
-                disabled={isToday}
-                className={`font-mono text-[11px] select-none ${isToday ? "text-ink-4 cursor-default" : "text-ink-3 hover:text-ink cursor-pointer"}`}
-                aria-label="Next day"
-              >→</button>
+            {/* View mode selector */}
+            <div className="mb-6">
+              <ViewModeBar active={rangeMode} onChange={handleRangeModeChange} />
             </div>
 
-            <h1 className="font-sans text-[56px] font-[500] tracking-[-0.03em] leading-none text-ink">
-              {dayName}
-            </h1>
-
-            <div className="font-mono text-[13px] text-ink-3 mt-2 mb-6">
-              {dateStr} · {String(dayEntryCount)} {dayEntryCount === 1 ? "entry" : "entries"}
-            </div>
-          </>
-        ) : (
-          <>
-            <h1 className="font-sans text-[48px] font-[500] tracking-[-0.03em] leading-none text-ink mb-2">
-              {rangeModeLabel(rangeMode)}
-            </h1>
-            <div className="font-mono text-[13px] text-ink-3 mb-6">
-              {String(rangeEntryCount)} {rangeEntryCount === 1 ? "entry" : "entries"}
-            </div>
-          </>
-        )}
-
-        {/* Kind filter */}
-        <FilterBar
-          allEntries={isRangeMode ? rangeAllEntries : dayAllEntries}
-          active={activeFilter}
-          onChange={setActiveFilter}
-        />
-
-        <div className="border-t border-line" />
-
-        {!isRangeMode && dayEntries.length === 0 && (
-          <div className="py-16 text-center text-[15px] italic text-ink-4">
-            {dayEmptyText}
-          </div>
-        )}
-        {!isRangeMode && dayEntries.length > 0 && (
-          <div className="divide-y divide-line">
-            {dayEntries.map((entry) => (
-              <EntryRow
-                key={entry.id}
-                entry={entry}
-                isConfirming={confirmingId === entry.id}
-                onClickNote={(id) => { onNavigateNotes(id); }}
-                onClickMeeting={(id) => { onNavigateMeeting(id); }}
-                onDeleteRequest={() => { setConfirmingId(entry.id); }}
-                onDeleteConfirm={() => { handleConfirmDelete(entry); }}
-                onDeleteCancel={() => { setConfirmingId(null); }}
-              />
-            ))}
-          </div>
-        )}
-        {isRangeMode && flatItems.length === 0 && (
-          <div className="py-16 text-center text-[15px] italic text-ink-4">
-            {rangeEmptyText}
-          </div>
-        )}
-        {isRangeMode && flatItems.length > 0 && (
-            <div style={{ height: `${String(virtualizer.getTotalSize())}px`, position: "relative" }}>
-              {virtualizer.getVirtualItems().map((vItem) => {
-                const item = flatItems[vItem.index];
-                return (
-                  <div
-                    key={vItem.key}
-                    ref={virtualizer.measureElement}
-                    data-index={vItem.index}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      transform: `translateY(${String(vItem.start)}px)`,
-                    }}
+            {/* Header */}
+            {!isRangeMode ? (
+              <>
+                <div className="mb-2 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={prevDay}
+                    className="cursor-pointer font-mono text-[11px] text-ink-3 select-none hover:text-ink"
+                    aria-label="Previous day"
                   >
-                    {item !== undefined && (
-                      item.type === "day-header"
-                        ? <DayHeader label={item.label} />
-                        : <EntryRow
+                    ←
+                  </button>
+                  <div className="font-mono text-[11px] tracking-eyebrow text-accent uppercase">
+                    {eyebrowLabel}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={nextDay}
+                    disabled={isToday}
+                    className={`font-mono text-[11px] select-none ${isToday ? "cursor-default text-ink-4" : "cursor-pointer text-ink-3 hover:text-ink"}`}
+                    aria-label="Next day"
+                  >
+                    →
+                  </button>
+                </div>
+
+                <h1 className="font-sans text-[56px] leading-none font-[500] tracking-[-0.03em] text-ink">
+                  {dayName}
+                </h1>
+
+                <div className="mt-2 mb-6 font-mono text-[13px] text-ink-3">
+                  {dateStr} · {String(dayEntryCount)} {dayEntryCount === 1 ? "entry" : "entries"}
+                </div>
+              </>
+            ) : (
+              <>
+                <h1 className="mb-2 font-sans text-[48px] leading-none font-[500] tracking-[-0.03em] text-ink">
+                  {rangeModeLabel(rangeMode)}
+                </h1>
+                <div className="mb-6 font-mono text-[13px] text-ink-3">
+                  {String(rangeEntryCount)} {rangeEntryCount === 1 ? "entry" : "entries"}
+                </div>
+              </>
+            )}
+
+            {/* Kind filter */}
+            <FilterBar
+              allEntries={isRangeMode ? rangeAllEntries : dayAllEntries}
+              active={activeFilter}
+              onChange={setActiveFilter}
+            />
+
+            <div className="border-t border-line" />
+
+            {!isRangeMode && dayEntries.length === 0 && (
+              <div className="py-16 text-center text-[15px] text-ink-4 italic">{dayEmptyText}</div>
+            )}
+            {!isRangeMode && dayEntries.length > 0 && (
+              <div className="divide-y divide-line">
+                {dayEntries.map((entry) => (
+                  <EntryRow
+                    key={entry.id}
+                    entry={entry}
+                    isConfirming={confirmingId === entry.id}
+                    onClickNote={(id) => {
+                      onNavigateNotes(id);
+                    }}
+                    onClickMeeting={(id) => {
+                      onNavigateMeeting(id);
+                    }}
+                    onDeleteRequest={() => {
+                      setConfirmingId(entry.id);
+                    }}
+                    onDeleteConfirm={() => {
+                      handleConfirmDelete(entry);
+                    }}
+                    onDeleteCancel={() => {
+                      setConfirmingId(null);
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+            {isRangeMode && flatItems.length === 0 && (
+              <div className="py-16 text-center text-[15px] text-ink-4 italic">
+                {rangeEmptyText}
+              </div>
+            )}
+            {isRangeMode && flatItems.length > 0 && (
+              <div
+                style={{ height: `${String(virtualizer.getTotalSize())}px`, position: "relative" }}
+              >
+                {virtualizer.getVirtualItems().map((vItem) => {
+                  const item = flatItems[vItem.index];
+                  return (
+                    <div
+                      key={vItem.key}
+                      ref={virtualizer.measureElement}
+                      data-index={vItem.index}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        transform: `translateY(${String(vItem.start)}px)`,
+                      }}
+                    >
+                      {item !== undefined &&
+                        (item.type === "day-header" ? (
+                          <DayHeader label={item.label} />
+                        ) : (
+                          <EntryRow
                             entry={item.entry}
                             isConfirming={confirmingId === item.entry.id}
-                            onClickNote={(id) => { onNavigateNotes(id); }}
-                            onClickMeeting={(id) => { onNavigateMeeting(id); }}
-                            onDeleteRequest={() => { setConfirmingId(item.entry.id); }}
-                            onDeleteConfirm={() => { handleConfirmDelete(item.entry); }}
-                            onDeleteCancel={() => { setConfirmingId(null); }}
+                            onClickNote={(id) => {
+                              onNavigateNotes(id);
+                            }}
+                            onClickMeeting={(id) => {
+                              onNavigateMeeting(id);
+                            }}
+                            onDeleteRequest={() => {
+                              setConfirmingId(item.entry.id);
+                            }}
+                            onDeleteConfirm={() => {
+                              handleConfirmDelete(item.entry);
+                            }}
+                            onDeleteCancel={() => {
+                              setConfirmingId(null);
+                            }}
                             showBorder
                           />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-        )}
+                        ))}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </>
         )}
       </div>

@@ -46,7 +46,13 @@ export default function App(): React.JSX.Element {
     viewingSessionId,
     isRecording && viewingSessionId === activeSessionId,
   );
-  const { notes, create: createNote, update: updateNote, remove: deleteNote, refresh: refreshNotes } = useNotes();
+  const {
+    notes,
+    create: createNote,
+    update: updateNote,
+    remove: deleteNote,
+    refresh: refreshNotes,
+  } = useNotes();
   const {
     tasks,
     create: createTask,
@@ -64,7 +70,11 @@ export default function App(): React.JSX.Element {
     removeFromNote: removeTagFromNote,
     addToTask: addTagToTask,
     removeFromTask: removeTagFromTask,
-  } = useTags({ onRefreshSessions: refreshSessions, onRefreshNotes: refreshNotes, onRefreshTasks: refreshTasks });
+  } = useTags({
+    onRefreshSessions: refreshSessions,
+    onRefreshNotes: refreshNotes,
+    onRefreshTasks: refreshTasks,
+  });
   const { agentEntries, submit: submitPrompt } = useConversation();
 
   // Keep openNote in sync when the notes list refreshes (e.g. after autosave).
@@ -88,7 +98,9 @@ export default function App(): React.JSX.Element {
       }
     };
     window.addEventListener("keydown", handler);
-    return () => { window.removeEventListener("keydown", handler); };
+    return () => {
+      window.removeEventListener("keydown", handler);
+    };
   }, []);
 
   useEffect(() => {
@@ -97,9 +109,13 @@ export default function App(): React.JSX.Element {
       document.documentElement.classList.toggle("dark", dark);
     };
     apply(mq.matches);
-    const handler = (e: MediaQueryListEvent): void => { apply(e.matches); };
+    const handler = (e: MediaQueryListEvent): void => {
+      apply(e.matches);
+    };
     mq.addEventListener("change", handler);
-    return () => { mq.removeEventListener("change", handler); };
+    return () => {
+      mq.removeEventListener("change", handler);
+    };
   }, []);
 
   useEffect(() => {
@@ -107,18 +123,28 @@ export default function App(): React.JSX.Element {
   }, [isRecording, activeSessionId]);
 
   const handleRecordClick = (): void => {
-    if (isRecording) { setViewingSessionId(activeSessionId); setScreen("meeting"); return; }
-    void start("Meeting").then(() => { setScreen("meeting"); }).catch((err: unknown) => {
-      console.error("start recording failed:", err);
-    });
+    if (isRecording) {
+      setViewingSessionId(activeSessionId);
+      setScreen("meeting");
+      return;
+    }
+    void start("Meeting")
+      .then(() => {
+        setScreen("meeting");
+      })
+      .catch((err: unknown) => {
+        console.error("start recording failed:", err);
+      });
   };
 
   const handleStop = (): void => {
-    void stop().then(() => {
-      setScreen(viewingSessionId !== null ? "meeting" : "timeline");
-    }).catch((err: unknown) => {
-      console.error("stop recording failed:", err);
-    });
+    void stop()
+      .then(() => {
+        setScreen(viewingSessionId !== null ? "meeting" : "timeline");
+      })
+      .catch((err: unknown) => {
+        console.error("stop recording failed:", err);
+      });
   };
 
   const handleNavigateMeeting = (id?: string): void => {
@@ -141,9 +167,13 @@ export default function App(): React.JSX.Element {
 
   const handleSaveNotes = (newNotes: string): void => {
     if (viewingSessionId === null) return;
-    void updateSessionNotes(viewingSessionId, newNotes).then(() => { void refreshSessions(); }).catch((err: unknown) => {
-      console.error("save notes failed:", err);
-    });
+    void updateSessionNotes(viewingSessionId, newNotes)
+      .then(() => {
+        void refreshSessions();
+      })
+      .catch((err: unknown) => {
+        console.error("save notes failed:", err);
+      });
   };
 
   const handleDockSubmit = (value: string): void => {
@@ -158,12 +188,14 @@ export default function App(): React.JSX.Element {
   };
 
   const handleNewNote = (): void => {
-    void createNote("", "").then((note) => {
-      openNoteIdRef.current = note.id;
-      setOpenNote(note);
-    }).catch((err: unknown) => {
-      console.error("create note failed:", err);
-    });
+    void createNote("", "")
+      .then((note) => {
+        openNoteIdRef.current = note.id;
+        setOpenNote(note);
+      })
+      .catch((err: unknown) => {
+        console.error("create note failed:", err);
+      });
   };
 
   const handleCloseNote = (): void => {
@@ -179,11 +211,17 @@ export default function App(): React.JSX.Element {
         activeScreen={screen}
         isRecording={isRecording}
         elapsedSeconds={elapsedSeconds}
-        onNavigate={(s) => { setScreen(s); }}
+        onNavigate={(s) => {
+          setScreen(s);
+        }}
         onRecordClick={handleRecordClick}
         onNewNote={handleNewNote}
-        onOpenSettings={() => { setSettingsOpen(true); }}
-        onOpenSearch={() => { setSearchOpen(true); }}
+        onOpenSettings={() => {
+          setSettingsOpen(true);
+        }}
+        onOpenSearch={() => {
+          setSearchOpen(true);
+        }}
       />
 
       <div className="border-t border-line" />
@@ -243,12 +281,18 @@ export default function App(): React.JSX.Element {
       </div>
 
       {isStarting && (
-        <div className="shrink-0 flex items-center justify-center py-2 bg-accent-tint">
+        <div className="flex shrink-0 items-center justify-center bg-accent-tint py-2">
           <span className="font-mono text-[11px] text-accent">Loading whisper model…</span>
         </div>
       )}
 
-      <Dock activeScreen={screen} onSubmit={handleDockSubmit} onOpenSettings={() => { setSettingsOpen(true); }} />
+      <Dock
+        activeScreen={screen}
+        onSubmit={handleDockSubmit}
+        onOpenSettings={() => {
+          setSettingsOpen(true);
+        }}
+      />
 
       {openNote !== null && (
         <NoteModal
@@ -257,19 +301,39 @@ export default function App(): React.JSX.Element {
           onUpdate={updateNote}
           onDelete={deleteNote}
           onClose={handleCloseNote}
-          onAddTag={(noteId, name) => { void addTagToNote(noteId, name); }}
-          onRemoveTag={(noteId, tagId) => { void removeTagFromNote(noteId, tagId); }}
+          onAddTag={(noteId, name) => {
+            void addTagToNote(noteId, name);
+          }}
+          onRemoveTag={(noteId, tagId) => {
+            void removeTagFromNote(noteId, tagId);
+          }}
         />
       )}
 
-      <SettingsModal open={settingsOpen} onClose={() => { setSettingsOpen(false); }} />
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => {
+          setSettingsOpen(false);
+        }}
+      />
 
       {searchOpen && (
         <SearchBar
-          onClose={() => { setSearchOpen(false); }}
-          onNavigateMeeting={(id) => { setSearchOpen(false); handleNavigateMeeting(id); }}
-          onNavigateNote={(id) => { setSearchOpen(false); openNoteById(id); }}
-          onNavigateBoard={() => { setSearchOpen(false); setScreen("board"); }}
+          onClose={() => {
+            setSearchOpen(false);
+          }}
+          onNavigateMeeting={(id) => {
+            setSearchOpen(false);
+            handleNavigateMeeting(id);
+          }}
+          onNavigateNote={(id) => {
+            setSearchOpen(false);
+            openNoteById(id);
+          }}
+          onNavigateBoard={() => {
+            setSearchOpen(false);
+            setScreen("board");
+          }}
         />
       )}
     </div>
