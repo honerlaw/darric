@@ -41,9 +41,7 @@ function wordCount(text: string): number {
 
 function sessionDurationMin(s: Session): number | null {
   if (s.ended_at === null) return null;
-  return Math.round(
-    (new Date(s.ended_at).getTime() - new Date(s.started_at).getTime()) / 60000,
-  );
+  return Math.round((new Date(s.ended_at).getTime() - new Date(s.started_at).getTime()) / 60000);
 }
 
 function renderMarkdown(md: string): string {
@@ -72,9 +70,7 @@ function buildRailItems(notes: Note[], sessions: Session[]): RailItem[] {
   );
 }
 
-function groupRailItems(
-  items: RailItem[],
-): { label: string; items: RailItem[] }[] {
+function groupRailItems(items: RailItem[]): { label: string; items: RailItem[] }[] {
   const today = new Date().toDateString();
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
@@ -98,10 +94,7 @@ function groupRailItems(
 }
 
 /* ── Active selection ────────────────────────────────────────────────── */
-type ActiveSelection =
-  | { kind: "note"; id: string }
-  | { kind: "session"; id: string }
-  | null;
+type ActiveSelection = { kind: "note"; id: string } | { kind: "session"; id: string } | null;
 
 /* ── Note components ─────────────────────────────────────────────────── */
 interface NoteEditorProps {
@@ -126,37 +119,41 @@ function NoteEditor({
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[680px] px-10 py-8">
-          <div className="font-mono text-[11px] uppercase tracking-eyebrow text-accent mb-4">
+          <div className="mb-4 font-mono text-[11px] tracking-eyebrow text-accent uppercase">
             Note
           </div>
           <input
             autoFocus
             type="text"
             value={editTitle}
-            onChange={(e) => { onChangeTitle(e.target.value); }}
+            onChange={(e) => {
+              onChangeTitle(e.target.value);
+            }}
             placeholder="Title"
-            className="mb-4 w-full bg-transparent font-sans text-[44px] font-[500] tracking-[-0.028em] leading-[1.05] text-ink outline-none placeholder-ink-4"
+            className="mb-4 w-full bg-transparent font-sans text-[44px] leading-[1.05] font-[500] tracking-[-0.028em] text-ink placeholder-ink-4 outline-none"
           />
           <textarea
             value={editBody}
-            onChange={(e) => { onChangeBody(e.target.value); }}
+            onChange={(e) => {
+              onChangeBody(e.target.value);
+            }}
             placeholder="Write in markdown…"
-            className="min-h-[400px] w-full resize-none bg-transparent font-sans text-[16px] leading-[1.7] text-ink outline-none placeholder-ink-4"
+            className="min-h-[400px] w-full resize-none bg-transparent font-sans text-[16px] leading-[1.7] text-ink placeholder-ink-4 outline-none"
           />
         </div>
       </div>
-      <div className="shrink-0 flex items-center gap-3 border-t border-line px-10 py-4">
+      <div className="flex shrink-0 items-center gap-3 border-t border-line px-10 py-4">
         <button
           type="button"
           onClick={onDone}
-          className="cursor-pointer rounded-[8px] bg-accent px-4 py-2 text-[13px] font-[500] text-accent-fg hover:bg-accent-hover transition-colors"
+          className="cursor-pointer rounded-[8px] bg-accent px-4 py-2 text-[13px] font-[500] text-accent-fg transition-colors hover:bg-accent-hover"
         >
           Done
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="cursor-pointer rounded-[8px] border border-line px-4 py-2 text-[13px] text-ink-2 hover:bg-paper-sunken transition-colors"
+          className="cursor-pointer rounded-[8px] border border-line px-4 py-2 text-[13px] text-ink-2 transition-colors hover:bg-paper-sunken"
         >
           Cancel
         </button>
@@ -166,11 +163,14 @@ function NoteEditor({
 }
 
 /* eslint-disable react/no-danger */
-interface NoteBodyProps { html: string; onEdit: () => void }
+interface NoteBodyProps {
+  html: string;
+  onEdit: () => void;
+}
 function NoteBody({ html, onEdit }: NoteBodyProps): React.JSX.Element {
   return (
     <div
-      className="note-lede cursor-pointer font-sans text-[16px] leading-[1.7] text-ink [&_p]:mb-[18px] [&_ul]:mb-[18px] [&_ul]:list-disc [&_ul]:pl-[22px] [&_ol]:mb-[18px] [&_ol]:list-decimal [&_ol]:pl-[22px] [&_strong]:font-[600] [&_em]:italic"
+      className="note-lede cursor-pointer font-sans text-[16px] leading-[1.7] text-ink [&_em]:italic [&_ol]:mb-[18px] [&_ol]:list-decimal [&_ol]:pl-[22px] [&_p]:mb-[18px] [&_strong]:font-[600] [&_ul]:mb-[18px] [&_ul]:list-disc [&_ul]:pl-[22px]"
       onClick={onEdit}
       dangerouslySetInnerHTML={{ __html: html }}
     />
@@ -199,16 +199,16 @@ function NoteViewer({
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[680px] px-10 pt-8 pb-16">
-          <div className="font-mono text-[11px] uppercase tracking-eyebrow text-accent mb-4">
+          <div className="mb-4 font-mono text-[11px] tracking-eyebrow text-accent uppercase">
             Note
           </div>
           <h1
-            className="font-sans text-[44px] font-[500] tracking-[-0.028em] leading-[1.05] text-ink mb-4 cursor-pointer"
+            className="mb-4 cursor-pointer font-sans text-[44px] leading-[1.05] font-[500] tracking-[-0.028em] text-ink"
             onClick={onEdit}
           >
             {note.title.length > 0 ? note.title : "Untitled"}
           </h1>
-          <div className="flex items-center border-b border-line pb-3 mb-6">
+          <div className="mb-6 flex items-center border-b border-line pb-3">
             <span className="font-mono text-[11px] text-ink-3">
               {fmtTimestamp(note.updated_at)} · {String(wordCount(note.body))} words
             </span>
@@ -223,7 +223,7 @@ function NoteViewer({
           {note.body.length > 0 ? (
             <NoteBody html={renderMarkdown(note.body)} onEdit={onEdit} />
           ) : (
-            <div className="cursor-pointer py-8 text-[15px] italic text-ink-4" onClick={onEdit}>
+            <div className="cursor-pointer py-8 text-[15px] text-ink-4 italic" onClick={onEdit}>
               Click to add content…
             </div>
           )}
@@ -233,7 +233,7 @@ function NoteViewer({
         <button
           type="button"
           onClick={onEdit}
-          className="cursor-pointer rounded-[8px] border border-line px-4 py-2 text-[13px] text-ink-2 hover:bg-paper-sunken transition-colors"
+          className="cursor-pointer rounded-[8px] border border-line px-4 py-2 text-[13px] text-ink-2 transition-colors hover:bg-paper-sunken"
         >
           Edit
         </button>
@@ -265,19 +265,20 @@ function MeetingDetail({
   }, [session.id]);
 
   const dur = sessionDurationMin(session);
-  const topic = session.topic !== null && session.topic.length > 0 ? session.topic : "Untitled meeting";
+  const topic =
+    session.topic !== null && session.topic.length > 0 ? session.topic : "Untitled meeting";
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[680px] px-10 pt-8 pb-16">
-          <div className="font-mono text-[11px] uppercase tracking-eyebrow text-accent mb-4">
+          <div className="mb-4 font-mono text-[11px] tracking-eyebrow text-accent uppercase">
             Meeting
           </div>
-          <h1 className="font-sans text-[44px] font-[500] tracking-[-0.028em] leading-[1.05] text-ink mb-4">
+          <h1 className="mb-4 font-sans text-[44px] leading-[1.05] font-[500] tracking-[-0.028em] text-ink">
             {topic}
           </h1>
-          <div className="flex items-center border-b border-line pb-3 mb-6">
+          <div className="mb-6 flex items-center border-b border-line pb-3">
             <span className="font-mono text-[11px] text-ink-3">
               {fmtTimestamp(session.started_at)}
               {dur !== null ? ` · ${String(dur)} min` : ""}
@@ -294,7 +295,7 @@ function MeetingDetail({
           </div>
 
           {lines.length === 0 ? (
-            <div className="py-8 text-[15px] italic text-ink-4">
+            <div className="py-8 text-[15px] text-ink-4 italic">
               {session.ended_at !== null ? "No transcript recorded." : "Recording in progress…"}
             </div>
           ) : (
@@ -305,10 +306,10 @@ function MeetingDetail({
                   className="grid gap-x-[14px]"
                   style={{ gridTemplateColumns: "52px 1fr" }}
                 >
-                  <span className="font-mono text-[11px] text-ink-3 pt-[2px]">
+                  <span className="pt-[2px] font-mono text-[11px] text-ink-3">
                     {fmtTime(line.recorded_at)}
                   </span>
-                  <p className="font-sans text-[15px] italic leading-[1.6] text-ink-2">
+                  <p className="font-sans text-[15px] leading-[1.6] text-ink-2 italic">
                     {line.content}
                   </p>
                 </div>
@@ -360,7 +361,7 @@ function DeleteControl({
     <button
       type="button"
       onClick={onRequest}
-      className="cursor-pointer font-mono text-[11px] text-ink-4 hover:text-danger transition-colors"
+      className="cursor-pointer font-mono text-[11px] text-ink-4 transition-colors hover:text-danger"
     >
       Delete
     </button>
@@ -399,9 +400,7 @@ export function NotesScreen({
   const activeNote =
     active?.kind === "note" ? (notes.find((n) => n.id === active.id) ?? null) : null;
   const activeSession =
-    active?.kind === "session"
-      ? (sessions.find((s) => s.id === active.id) ?? null)
-      : null;
+    active?.kind === "session" ? (sessions.find((s) => s.id === active.id) ?? null) : null;
 
   useEffect(() => {
     if (activeNote !== null && !editing) {
@@ -425,7 +424,9 @@ export function NotesScreen({
 
   const autosave = (id: string, title: string, body: string): void => {
     if (saveTimer.current !== null) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => { void onUpdate(id, title, body); }, 800);
+    saveTimer.current = setTimeout(() => {
+      void onUpdate(id, title, body);
+    }, 800);
   };
 
   const handleCreate = async (): Promise<void> => {
@@ -457,7 +458,7 @@ export function NotesScreen({
   const renderDetail = (): React.JSX.Element => {
     if (active === null) {
       return (
-        <div className="flex flex-1 items-center justify-center text-[15px] italic text-ink-4">
+        <div className="flex flex-1 items-center justify-center text-[15px] text-ink-4 italic">
           Select a note or meeting
         </div>
       );
@@ -468,16 +469,22 @@ export function NotesScreen({
         <MeetingDetail
           session={activeSession}
           confirmDelete={confirmDelete}
-          onDeleteRequest={() => { setConfirmDelete(true); }}
-          onDeleteCancel={() => { setConfirmDelete(false); }}
-          onDeleteConfirm={() => { void handleDeleteSession(); }}
+          onDeleteRequest={() => {
+            setConfirmDelete(true);
+          }}
+          onDeleteCancel={() => {
+            setConfirmDelete(false);
+          }}
+          onDeleteConfirm={() => {
+            void handleDeleteSession();
+          }}
         />
       );
     }
 
     if (activeNote === null) {
       return (
-        <div className="flex flex-1 items-center justify-center text-[15px] italic text-ink-4">
+        <div className="flex flex-1 items-center justify-center text-[15px] text-ink-4 italic">
           Select a note or meeting
         </div>
       );
@@ -499,9 +506,13 @@ export function NotesScreen({
           }}
           onDone={() => {
             if (saveTimer.current !== null) clearTimeout(saveTimer.current);
-            void onUpdate(activeNote.id, editTitle, editBody).then(() => { setEditing(false); });
+            void onUpdate(activeNote.id, editTitle, editBody).then(() => {
+              setEditing(false);
+            });
           }}
-          onCancel={() => { setEditing(false); }}
+          onCancel={() => {
+            setEditing(false);
+          }}
         />
       );
     }
@@ -511,9 +522,15 @@ export function NotesScreen({
         note={activeNote}
         confirmDelete={confirmDelete}
         onEdit={startEditing}
-        onDeleteRequest={() => { setConfirmDelete(true); }}
-        onDeleteCancel={() => { setConfirmDelete(false); }}
-        onDeleteConfirm={() => { void handleDeleteNote(); }}
+        onDeleteRequest={() => {
+          setConfirmDelete(true);
+        }}
+        onDeleteCancel={() => {
+          setConfirmDelete(false);
+        }}
+        onDeleteConfirm={() => {
+          void handleDeleteNote();
+        }}
       />
     );
   };
@@ -521,14 +538,16 @@ export function NotesScreen({
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* ── Rail ─────────────────────────────────────────────────────── */}
-      <div className="flex w-[280px] shrink-0 flex-col border-r border-line overflow-hidden">
-        <div className="flex h-14 items-center px-[14px] shrink-0">
+      <div className="flex w-[280px] shrink-0 flex-col overflow-hidden border-r border-line">
+        <div className="flex h-14 shrink-0 items-center px-[14px]">
           <span className="font-sans text-[18px] font-[500] text-ink">All notes</span>
           <div className="flex-1" />
           <button
             type="button"
-            onClick={() => { void handleCreate(); }}
-            className="cursor-pointer rounded-[8px] border border-line bg-paper px-3 py-[5px] text-[12px] text-ink-2 hover:bg-paper-sunken transition-colors"
+            onClick={() => {
+              void handleCreate();
+            }}
+            className="cursor-pointer rounded-[8px] border border-line bg-paper px-3 py-[5px] text-[12px] text-ink-2 transition-colors hover:bg-paper-sunken"
           >
             ＋ New
           </button>
@@ -538,13 +557,11 @@ export function NotesScreen({
 
         <div className="flex-1 overflow-y-auto">
           {allItems.length === 0 && (
-            <div className="px-4 py-8 text-center text-[13px] italic text-ink-4">
-              No notes yet
-            </div>
+            <div className="px-4 py-8 text-center text-[13px] text-ink-4 italic">No notes yet</div>
           )}
           {grouped.map(({ label, items }) => (
             <div key={label}>
-              <div className="px-[14px] py-[18px] pb-[6px] font-mono text-[10px] uppercase tracking-[0.14em] text-ink-4">
+              <div className="px-[14px] py-[18px] pb-[6px] font-mono text-[10px] tracking-[0.14em] text-ink-4 uppercase">
                 {label}
               </div>
               {items.map((ri) => {
@@ -572,7 +589,7 @@ export function NotesScreen({
                           {fmtWhen(note.updated_at)}
                         </span>
                       </div>
-                      <div className="mt-[2px] truncate text-[12px] italic text-ink-3">
+                      <div className="mt-[2px] truncate text-[12px] text-ink-3 italic">
                         {note.body.length > 0 ? note.body.slice(0, 80) : "No content"}
                       </div>
                     </button>
@@ -609,7 +626,7 @@ export function NotesScreen({
                       </span>
                     </div>
                     <div className="mt-[2px] flex items-center gap-[6px]">
-                      <span className="font-mono text-[10px] uppercase tracking-[0.08em] text-accent">
+                      <span className="font-mono text-[10px] tracking-[0.08em] text-accent uppercase">
                         meeting
                       </span>
                       {dur !== null && (
@@ -627,9 +644,7 @@ export function NotesScreen({
       </div>
 
       {/* ── Detail pane ──────────────────────────────────────────────── */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {renderDetail()}
-      </div>
+      <div className="flex flex-1 flex-col overflow-hidden">{renderDetail()}</div>
     </div>
   );
 }

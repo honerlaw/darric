@@ -22,7 +22,11 @@ export function useTranscript(sessionId: string | null, isLive: boolean): Transc
     const wasLive = prevIsLiveRef.current;
     prevIsLiveRef.current = isLive;
 
-    const appendChunk = (chunk: { source: "mic" | "speaker"; content: string; recorded_at: string }): void => {
+    const appendChunk = (chunk: {
+      source: "mic" | "speaker";
+      content: string;
+      recorded_at: string;
+    }): void => {
       setLines((prev) => [
         ...prev,
         {
@@ -37,17 +41,27 @@ export function useTranscript(sessionId: string | null, isLive: boolean): Transc
 
     if (isLive) {
       const unsub = onTranscriptChunk(appendChunk);
-      return () => { void unsub.then((fn) => { fn(); }); };
+      return () => {
+        void unsub.then((fn) => {
+          fn();
+        });
+      };
     }
 
     if (wasLive) {
       // Recording just stopped. Keep listening for FLUSH_LINGER_MS so the
       // final partial segment (transcribed async by whisper) still appears.
       const unsub = onTranscriptChunk(appendChunk);
-      const timer = setTimeout(() => { void unsub.then((fn) => { fn(); }); }, FLUSH_LINGER_MS);
+      const timer = setTimeout(() => {
+        void unsub.then((fn) => {
+          fn();
+        });
+      }, FLUSH_LINGER_MS);
       return () => {
         clearTimeout(timer);
-        void unsub.then((fn) => { fn(); });
+        void unsub.then((fn) => {
+          fn();
+        });
       };
     }
   }, [isLive]);

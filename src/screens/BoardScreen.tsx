@@ -74,7 +74,7 @@ function TaskCard({
       style={style}
       className={`group flex items-start gap-[10px] rounded-[10px] bg-paper p-3 transition-shadow ${
         editing
-          ? "ring-2 ring-accent shadow-none"
+          ? "shadow-none ring-2 ring-accent"
           : "hover:[box-shadow:0_2px_4px_rgba(10,10,10,0.04),0_6px_16px_rgba(10,10,10,0.06)]"
       }`}
     >
@@ -82,7 +82,7 @@ function TaskCard({
       <div
         {...attributes}
         {...listeners}
-        className="mt-[2px] cursor-grab active:cursor-grabbing shrink-0 opacity-35 hover:opacity-100"
+        className="mt-[2px] shrink-0 cursor-grab opacity-35 hover:opacity-100 active:cursor-grabbing"
       >
         <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" className="text-ink-3">
           <circle cx="2" cy="2" r="1.5" />
@@ -132,21 +132,34 @@ function TaskCard({
               setEditing(false);
             }}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); cancelEditRef.current = true; onRename(draft); setEditing(false); }
-              if (e.key === "Escape") { cancelEditRef.current = true; setDraft(task.title); setEditing(false); }
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                cancelEditRef.current = true;
+                onRename(draft);
+                setEditing(false);
+              }
+              if (e.key === "Escape") {
+                cancelEditRef.current = true;
+                setDraft(task.title);
+                setEditing(false);
+              }
             }}
             className="w-full resize-none overflow-hidden border-b border-accent bg-transparent pb-[2px] text-[14px] leading-[1.45] text-ink outline-none"
           />
-          <span className="text-[10px] text-ink-4">Shift+Enter for new line · Enter to save · Esc to cancel</span>
+          <span className="text-[10px] text-ink-4">
+            Shift+Enter for new line · Enter to save · Esc to cancel
+          </span>
           <TagInput tags={task.tags} allTags={allTags} onAdd={onAddTag} onRemove={onRemoveTag} />
         </div>
       ) : (
         <div className="flex flex-1 flex-col gap-[4px]">
           <span
-            className={`cursor-text whitespace-pre-wrap text-[14px] leading-[1.45] ${
+            className={`cursor-text text-[14px] leading-[1.45] whitespace-pre-wrap ${
               done ? "text-ink-4 line-through" : "text-ink"
             }`}
-            onDoubleClick={() => { setEditing(true); }}
+            onDoubleClick={() => {
+              setEditing(true);
+            }}
           >
             {task.title}
           </span>
@@ -166,19 +179,24 @@ function TaskCard({
       )}
 
       {/* Delete control */}
-      {!editing && (
-        confirmingDelete ? (
+      {!editing &&
+        (confirmingDelete ? (
           <div className="flex shrink-0 items-center gap-[8px] text-[11px]">
             <button
               type="button"
-              onClick={() => { onDelete(); setConfirmingDelete(false); }}
+              onClick={() => {
+                onDelete();
+                setConfirmingDelete(false);
+              }}
               className="cursor-pointer text-danger hover:underline"
             >
               Delete
             </button>
             <button
               type="button"
-              onClick={() => { setConfirmingDelete(false); }}
+              onClick={() => {
+                setConfirmingDelete(false);
+              }}
               className="cursor-pointer text-ink-3 hover:text-ink"
             >
               Cancel
@@ -187,14 +205,16 @@ function TaskCard({
         ) : (
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); setConfirmingDelete(true); }}
+            onClick={(e) => {
+              e.stopPropagation();
+              setConfirmingDelete(true);
+            }}
             className="shrink-0 cursor-pointer text-[18px] leading-none text-ink-4 opacity-0 transition-opacity group-hover:opacity-100 hover:text-danger"
             aria-label="Delete task"
           >
             ×
           </button>
-        )
-      )}
+        ))}
     </div>
   );
 }
@@ -213,8 +233,10 @@ function AddTaskRow({ onAdd }: AddTaskRowProps): React.JSX.Element {
     return (
       <button
         type="button"
-        onClick={() => { setActive(true); }}
-        className="flex w-full cursor-pointer items-center gap-2 rounded-[10px] px-3 py-2 text-[14px] text-ink-4 hover:bg-paper-deep transition-colors"
+        onClick={() => {
+          setActive(true);
+        }}
+        className="flex w-full cursor-pointer items-center gap-2 rounded-[10px] px-3 py-2 text-[14px] text-ink-4 transition-colors hover:bg-paper-deep"
       >
         <span className="flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-[4px] border border-dashed border-ink-4 text-[11px]" />
         <span>＋ Add task</span>
@@ -228,7 +250,9 @@ function AddTaskRow({ onAdd }: AddTaskRowProps): React.JSX.Element {
         autoFocus
         type="text"
         value={value}
-        onChange={(e) => { setValue(e.target.value); }}
+        onChange={(e) => {
+          setValue(e.target.value);
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter" && value.trim().length > 0) {
             addedRef.current = true;
@@ -236,7 +260,11 @@ function AddTaskRow({ onAdd }: AddTaskRowProps): React.JSX.Element {
             setValue("");
             setActive(false);
           }
-          if (e.key === "Escape") { addedRef.current = true; setValue(""); setActive(false); }
+          if (e.key === "Escape") {
+            addedRef.current = true;
+            setValue("");
+            setActive(false);
+          }
         }}
         onBlur={() => {
           if (value.trim().length > 0 && !addedRef.current) onAdd(value.trim());
@@ -245,7 +273,7 @@ function AddTaskRow({ onAdd }: AddTaskRowProps): React.JSX.Element {
           setActive(false);
         }}
         placeholder="Task title…"
-        className="w-full bg-transparent text-[14px] text-ink outline-none placeholder-ink-4"
+        className="w-full bg-transparent text-[14px] text-ink placeholder-ink-4 outline-none"
       />
     </div>
   );
@@ -278,10 +306,13 @@ function BoardColumn({
   const { setNodeRef } = useDroppable({ id: `col-${col.id}` });
 
   return (
-    <div ref={setNodeRef} className="flex flex-col rounded-[14px] bg-paper-sunken p-[14px_12px_10px]">
+    <div
+      ref={setNodeRef}
+      className="flex flex-col rounded-[14px] bg-paper-sunken p-[14px_12px_10px]"
+    >
       <div className="mb-3 flex items-center gap-2">
         {col.id === "doing" ? (
-          <em className="font-sans text-[13px] font-[500] not-italic text-accent italic">
+          <em className="font-sans text-[13px] font-[500] text-accent italic not-italic">
             {col.label}
           </em>
         ) : (
@@ -297,11 +328,21 @@ function BoardColumn({
               key={task.id}
               task={task}
               allTags={allTags}
-              onToggleDone={() => { onToggleDone(task.id); }}
-              onRename={(title) => { onRename(task.id, title); }}
-              onDelete={() => { onRemove(task.id); }}
-              onAddTag={(name) => { onAddTag(task.id, name); }}
-              onRemoveTag={(tagId) => { onRemoveTag(task.id, tagId); }}
+              onToggleDone={() => {
+                onToggleDone(task.id);
+              }}
+              onRename={(title) => {
+                onRename(task.id, title);
+              }}
+              onDelete={() => {
+                onRemove(task.id);
+              }}
+              onAddTag={(name) => {
+                onAddTag(task.id, name);
+              }}
+              onRemoveTag={(tagId) => {
+                onRemoveTag(task.id, tagId);
+              }}
             />
           ))}
         </SortableContext>
@@ -344,18 +385,22 @@ export function BoardScreen({
   const cancelTitleRef = useRef(false);
 
   useEffect(() => {
-    getSetting("board.title").then((val) => {
-      if (val !== null && val.trim().length > 0) {
-        setBoardTitle(val);
-        setTitleDraft(val);
-      }
-    }).catch(() => undefined);
+    getSetting("board.title")
+      .then((val) => {
+        if (val !== null && val.trim().length > 0) {
+          setBoardTitle(val);
+          setTitleDraft(val);
+        }
+      })
+      .catch(() => undefined);
   }, []);
 
   const startEditingTitle = (): void => {
     setTitleDraft(boardTitle);
     setEditingTitle(true);
-    setTimeout(() => { titleInputRef.current?.select(); }, 0);
+    setTimeout(() => {
+      titleInputRef.current?.select();
+    }, 0);
   };
 
   const commitTitle = (): void => {
@@ -373,9 +418,7 @@ export function BoardScreen({
     setEditingTitle(false);
   };
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-  );
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
 
   const tasksByCol = (col: TaskColumn): Task[] =>
     tasks.filter((t) => t.col === col).sort((a, b) => a.position - b.position);
@@ -435,7 +478,9 @@ export function BoardScreen({
               autoFocus
               type="text"
               value={titleDraft}
-              onChange={(e) => { setTitleDraft(e.target.value); }}
+              onChange={(e) => {
+                setTitleDraft(e.target.value);
+              }}
               onBlur={() => {
                 if (!cancelTitleRef.current) commitTitle();
                 cancelTitleRef.current = false;
@@ -444,11 +489,11 @@ export function BoardScreen({
                 if (e.key === "Enter") commitTitle();
                 if (e.key === "Escape") cancelTitle();
               }}
-              className="font-sans text-[26px] font-[500] tracking-[-0.02em] text-ink bg-transparent border-b border-accent outline-none w-[220px]"
+              className="w-[220px] border-b border-accent bg-transparent font-sans text-[26px] font-[500] tracking-[-0.02em] text-ink outline-none"
             />
           ) : (
             <h2
-              className="font-sans text-[26px] font-[500] tracking-[-0.02em] text-ink cursor-text hover:text-ink-2 transition-colors"
+              className="cursor-text font-sans text-[26px] font-[500] tracking-[-0.02em] text-ink transition-colors hover:text-ink-2"
               onClick={startEditingTitle}
               title="Click to rename"
             >
@@ -470,12 +515,22 @@ export function BoardScreen({
                 col={col}
                 tasks={tasksByCol(col.id)}
                 allTags={allTags}
-                onAdd={(title) => { void onCreate(title, col.id); }}
+                onAdd={(title) => {
+                  void onCreate(title, col.id);
+                }}
                 onToggleDone={handleToggleDone}
-                onRename={(id, title) => { void onRename(id, title); }}
-                onRemove={(id) => { void onRemove(id); }}
-                onAddTag={(taskId, name) => { void onAddTag(taskId, name); }}
-                onRemoveTag={(taskId, tagId) => { void onRemoveTag(taskId, tagId); }}
+                onRename={(id, title) => {
+                  void onRename(id, title);
+                }}
+                onRemove={(id) => {
+                  void onRemove(id);
+                }}
+                onAddTag={(taskId, name) => {
+                  void onAddTag(taskId, name);
+                }}
+                onRemoveTag={(taskId, tagId) => {
+                  void onRemoveTag(taskId, tagId);
+                }}
               />
             ))}
           </div>

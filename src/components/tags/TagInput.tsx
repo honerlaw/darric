@@ -52,14 +52,18 @@ export function TagInput({ tags, allTags, onAdd, onRemove }: TagInputProps): Rea
       }
     };
     document.addEventListener("mousedown", handler);
-    return () => { document.removeEventListener("mousedown", handler); };
+    return () => {
+      document.removeEventListener("mousedown", handler);
+    };
   }, []);
 
   return (
     <div ref={containerRef} className="relative">
       <div
-        className="flex flex-wrap items-center gap-[6px] min-h-[28px]"
-        onClick={() => { inputRef.current?.focus(); }}
+        className="flex min-h-[28px] flex-wrap items-center gap-[6px]"
+        onClick={() => {
+          inputRef.current?.focus();
+        }}
       >
         {tags.map((tag) => (
           <span
@@ -69,8 +73,11 @@ export function TagInput({ tags, allTags, onAdd, onRemove }: TagInputProps): Rea
             {tag.name}
             <button
               type="button"
-              onClick={(e) => { e.stopPropagation(); onRemove(tag.id); }}
-              className="cursor-pointer leading-none text-accent/60 hover:text-accent transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove(tag.id);
+              }}
+              className="cursor-pointer leading-none text-accent/60 transition-colors hover:text-accent"
               aria-label={`Remove tag ${tag.name}`}
             >
               ×
@@ -86,15 +93,17 @@ export function TagInput({ tags, allTags, onAdd, onRemove }: TagInputProps): Rea
             setInputValue(e.target.value);
             setShowSuggestions(true);
           }}
-          onFocus={() => { setShowSuggestions(true); }}
+          onFocus={() => {
+            setShowSuggestions(true);
+          }}
           onKeyDown={handleKeyDown}
           placeholder={tags.length === 0 ? "Add tag…" : ""}
-          className="flex-1 min-w-[80px] bg-transparent font-mono text-[11px] text-ink outline-none placeholder-ink-4"
+          className="min-w-[80px] flex-1 bg-transparent font-mono text-[11px] text-ink placeholder-ink-4 outline-none"
         />
       </div>
 
       {showSuggestions && trimmed.length > 0 && suggestions.length > 0 && (
-        <div className="absolute left-0 top-full z-10 mt-1 max-h-[160px] overflow-y-auto rounded-[8px] bg-paper border border-line shadow-[0_4px_16px_rgba(10,10,10,0.12)]">
+        <div className="absolute top-full left-0 z-10 mt-1 max-h-[160px] overflow-y-auto rounded-[8px] border border-line bg-paper shadow-[0_4px_16px_rgba(10,10,10,0.12)]">
           {suggestions.map((tag) => (
             <button
               key={tag.id}
@@ -103,7 +112,7 @@ export function TagInput({ tags, allTags, onAdd, onRemove }: TagInputProps): Rea
                 e.preventDefault();
                 commit(tag.name);
               }}
-              className="flex w-full cursor-pointer items-center px-3 py-[7px] font-mono text-[11px] text-ink-2 hover:bg-paper-sunken hover:text-ink transition-colors"
+              className="flex w-full cursor-pointer items-center px-3 py-[7px] font-mono text-[11px] text-ink-2 transition-colors hover:bg-paper-sunken hover:text-ink"
             >
               {tag.name}
             </button>

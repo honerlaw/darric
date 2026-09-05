@@ -22,7 +22,9 @@ function SpeakerBadge({
     const num = parseInt(label.replace("Speaker ", ""), 10);
     const colorClass = PANEL_SPEAKER_COLORS[(num - 1) % 5] ?? "bg-blue-900/50 text-blue-300";
     return (
-      <span className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs font-medium uppercase ${colorClass}`}>
+      <span
+        className={`mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-xs font-medium uppercase ${colorClass}`}
+      >
         S{num}
       </span>
     );

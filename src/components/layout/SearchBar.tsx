@@ -23,7 +23,7 @@ function formatDate(iso: string): string {
 function TagPills({ tags }: { tags: Tag[] }): React.JSX.Element | null {
   if (tags.length === 0) return null;
   return (
-    <div className="flex flex-wrap gap-1 mt-[3px]">
+    <div className="mt-[3px] flex flex-wrap gap-1">
       {tags.slice(0, 4).map((t) => (
         <span
           key={t.id}
@@ -71,20 +71,19 @@ function ResultRow({
 
   const snippet = item.kind !== "task" ? item.data.snippet : null;
   const tags = item.data.tags;
-  const date =
-    item.kind === "session" ? formatDate(item.data.started_at) : null;
+  const date = item.kind === "session" ? formatDate(item.data.started_at) : null;
 
   return (
     <button
       ref={ref}
       type="button"
       onClick={onClick}
-      className={`w-full cursor-pointer text-left px-4 py-[10px] transition-colors ${
+      className={`w-full cursor-pointer px-4 py-[10px] text-left transition-colors ${
         selected ? "bg-paper-sunken" : "hover:bg-paper-sunken/60"
       }`}
     >
       <div className="flex items-baseline gap-2">
-        <span className={`shrink-0 font-mono text-[10px] uppercase tracking-eyebrow ${kindColor}`}>
+        <span className={`shrink-0 font-mono text-[10px] tracking-eyebrow uppercase ${kindColor}`}>
           {kindLabel}
         </span>
         <span className="truncate text-[14px] font-[450] text-ink">{title}</span>
@@ -102,8 +101,8 @@ function ResultRow({
 
 function SectionHeader({ label, count }: { label: string; count: number }): React.JSX.Element {
   return (
-    <div className="flex items-center gap-2 px-4 py-[6px] border-t border-line first:border-t-0">
-      <span className="font-mono text-[10px] uppercase tracking-eyebrow text-ink-4">{label}</span>
+    <div className="flex items-center gap-2 border-t border-line px-4 py-[6px] first:border-t-0">
+      <span className="font-mono text-[10px] tracking-eyebrow text-ink-4 uppercase">{label}</span>
       <span className="font-mono text-[10px] text-ink-4">({count})</span>
     </div>
   );
@@ -133,7 +132,9 @@ export function SearchBar({
   // Build flat list of result items for keyboard nav
   const items: ResultItem[] = [];
   if (results !== null) {
-    results.sessions.slice(0, MAX_PER_GROUP).forEach((s) => items.push({ kind: "session", data: s }));
+    results.sessions
+      .slice(0, MAX_PER_GROUP)
+      .forEach((s) => items.push({ kind: "session", data: s }));
     results.notes.slice(0, MAX_PER_GROUP).forEach((n) => items.push({ kind: "note", data: n }));
     results.tasks.slice(0, MAX_PER_GROUP).forEach((t) => items.push({ kind: "task", data: t }));
   }
@@ -169,8 +170,10 @@ export function SearchBar({
       }
     };
     window.addEventListener("keydown", handler);
-    return () => { window.removeEventListener("keydown", handler); };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => {
+      window.removeEventListener("keydown", handler);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, selectedIndex]);
 
   const hasResults = results !== null && items.length > 0;
@@ -181,14 +184,17 @@ export function SearchBar({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-start justify-center bg-ink/20 backdrop-blur-[2px] pt-[15vh]"
+      className="fixed inset-0 z-[60] flex items-start justify-center bg-ink/20 pt-[15vh] backdrop-blur-[2px]"
       onClick={(e) => {
-        if (e.target === e.currentTarget) { clear(); onClose(); }
+        if (e.target === e.currentTarget) {
+          clear();
+          onClose();
+        }
       }}
     >
-      <div className="flex w-[560px] flex-col rounded-[14px] bg-paper shadow-[0_8px_32px_rgba(10,10,10,0.18)] overflow-hidden">
+      <div className="flex w-[560px] flex-col overflow-hidden rounded-[14px] bg-paper shadow-[0_8px_32px_rgba(10,10,10,0.18)]">
         {/* Search input */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-line">
+        <div className="flex items-center gap-3 border-b border-line px-4 py-3">
           <svg
             className="shrink-0 text-ink-3"
             width="16"
@@ -198,20 +204,29 @@ export function SearchBar({
             aria-hidden="true"
           >
             <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <path
+              d="M10.5 10.5L14 14"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
           </svg>
           <input
             ref={inputRef}
             type="text"
             value={query}
-            onChange={(e) => { setQuery(e.target.value); }}
+            onChange={(e) => {
+              setQuery(e.target.value);
+            }}
             placeholder="Search meetings, notes, tasks…"
-            className="flex-1 bg-transparent text-[14px] text-ink placeholder:text-ink-4 outline-none"
+            className="flex-1 bg-transparent text-[14px] text-ink outline-none placeholder:text-ink-4"
           />
           {isSearching && (
             <span className="shrink-0 font-mono text-[10px] text-ink-4">searching…</span>
           )}
-          <kbd className="shrink-0 font-mono text-[10px] text-ink-4 border border-line rounded px-1">esc</kbd>
+          <kbd className="shrink-0 rounded border border-line px-1 font-mono text-[10px] text-ink-4">
+            esc
+          </kbd>
         </div>
 
         {/* Results */}
@@ -225,80 +240,89 @@ export function SearchBar({
 
             {hasResults && (
               <>
-                {results.sessions.length > 0 && (() => {
-                  const groupItems = results.sessions.slice(0, MAX_PER_GROUP);
-                  const groupStart = runningIndex;
-                  runningIndex += groupItems.length;
-                  const extra = results.sessions.length - MAX_PER_GROUP;
-                  return (
-                    <div>
-                      <SectionHeader label="Meetings" count={results.sessions.length} />
-                      {groupItems.map((s, i) => (
-                        <ResultRow
-                          key={s.id}
-                          item={{ kind: "session", data: s }}
-                          selected={selectedIndex === groupStart + i}
-                          onClick={() => { activate({ kind: "session", data: s }); }}
-                        />
-                      ))}
-                      {extra > 0 && (
-                        <p className="px-4 py-[6px] font-mono text-[10px] text-ink-4">
-                          and {extra} more
-                        </p>
-                      )}
-                    </div>
-                  );
-                })()}
+                {results.sessions.length > 0 &&
+                  (() => {
+                    const groupItems = results.sessions.slice(0, MAX_PER_GROUP);
+                    const groupStart = runningIndex;
+                    runningIndex += groupItems.length;
+                    const extra = results.sessions.length - MAX_PER_GROUP;
+                    return (
+                      <div>
+                        <SectionHeader label="Meetings" count={results.sessions.length} />
+                        {groupItems.map((s, i) => (
+                          <ResultRow
+                            key={s.id}
+                            item={{ kind: "session", data: s }}
+                            selected={selectedIndex === groupStart + i}
+                            onClick={() => {
+                              activate({ kind: "session", data: s });
+                            }}
+                          />
+                        ))}
+                        {extra > 0 && (
+                          <p className="px-4 py-[6px] font-mono text-[10px] text-ink-4">
+                            and {extra} more
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
 
-                {results.notes.length > 0 && (() => {
-                  const groupItems = results.notes.slice(0, MAX_PER_GROUP);
-                  const groupStart = runningIndex;
-                  runningIndex += groupItems.length;
-                  const extra = results.notes.length - MAX_PER_GROUP;
-                  return (
-                    <div>
-                      <SectionHeader label="Notes" count={results.notes.length} />
-                      {groupItems.map((n, i) => (
-                        <ResultRow
-                          key={n.id}
-                          item={{ kind: "note", data: n }}
-                          selected={selectedIndex === groupStart + i}
-                          onClick={() => { activate({ kind: "note", data: n }); }}
-                        />
-                      ))}
-                      {extra > 0 && (
-                        <p className="px-4 py-[6px] font-mono text-[10px] text-ink-4">
-                          and {extra} more
-                        </p>
-                      )}
-                    </div>
-                  );
-                })()}
+                {results.notes.length > 0 &&
+                  (() => {
+                    const groupItems = results.notes.slice(0, MAX_PER_GROUP);
+                    const groupStart = runningIndex;
+                    runningIndex += groupItems.length;
+                    const extra = results.notes.length - MAX_PER_GROUP;
+                    return (
+                      <div>
+                        <SectionHeader label="Notes" count={results.notes.length} />
+                        {groupItems.map((n, i) => (
+                          <ResultRow
+                            key={n.id}
+                            item={{ kind: "note", data: n }}
+                            selected={selectedIndex === groupStart + i}
+                            onClick={() => {
+                              activate({ kind: "note", data: n });
+                            }}
+                          />
+                        ))}
+                        {extra > 0 && (
+                          <p className="px-4 py-[6px] font-mono text-[10px] text-ink-4">
+                            and {extra} more
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
 
-                {results.tasks.length > 0 && (() => {
-                  const groupItems = results.tasks.slice(0, MAX_PER_GROUP);
-                  const groupStart = runningIndex;
-                  runningIndex += groupItems.length;
-                  const extra = results.tasks.length - MAX_PER_GROUP;
-                  return (
-                    <div>
-                      <SectionHeader label="Tasks" count={results.tasks.length} />
-                      {groupItems.map((t, i) => (
-                        <ResultRow
-                          key={t.id}
-                          item={{ kind: "task", data: t }}
-                          selected={selectedIndex === groupStart + i}
-                          onClick={() => { activate({ kind: "task", data: t }); }}
-                        />
-                      ))}
-                      {extra > 0 && (
-                        <p className="px-4 py-[6px] font-mono text-[10px] text-ink-4">
-                          and {extra} more
-                        </p>
-                      )}
-                    </div>
-                  );
-                })()}
+                {results.tasks.length > 0 &&
+                  (() => {
+                    const groupItems = results.tasks.slice(0, MAX_PER_GROUP);
+                    const groupStart = runningIndex;
+                    runningIndex += groupItems.length;
+                    const extra = results.tasks.length - MAX_PER_GROUP;
+                    return (
+                      <div>
+                        <SectionHeader label="Tasks" count={results.tasks.length} />
+                        {groupItems.map((t, i) => (
+                          <ResultRow
+                            key={t.id}
+                            item={{ kind: "task", data: t }}
+                            selected={selectedIndex === groupStart + i}
+                            onClick={() => {
+                              activate({ kind: "task", data: t });
+                            }}
+                          />
+                        ))}
+                        {extra > 0 && (
+                          <p className="px-4 py-[6px] font-mono text-[10px] text-ink-4">
+                            and {extra} more
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
               </>
             )}
           </div>

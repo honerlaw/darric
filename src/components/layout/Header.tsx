@@ -14,7 +14,9 @@ interface HeaderProps {
 }
 
 function formatTimer(sec: number): string {
-  const m = Math.floor(sec / 60).toString().padStart(2, "0");
+  const m = Math.floor(sec / 60)
+    .toString()
+    .padStart(2, "0");
   const s = (sec % 60).toString().padStart(2, "0");
   return `${m}:${s}`;
 }
@@ -37,10 +39,7 @@ export function Header({
   const isMeeting = activeScreen === "meeting";
 
   return (
-    <header
-      className="flex h-14 shrink-0 items-center gap-8 px-6"
-      data-tauri-drag-region="true"
-    >
+    <header className="flex h-14 shrink-0 items-center gap-8 px-6" data-tauri-drag-region="true">
       {/* Brand */}
       <div className="flex items-center gap-2">
         <div className="h-3 w-3 rounded-[2px] bg-ink" />
@@ -56,14 +55,16 @@ export function Header({
               <button
                 key={id}
                 type="button"
-                onClick={() => { onNavigate(id); }}
+                onClick={() => {
+                  onNavigate(id);
+                }}
                 className={`relative cursor-pointer pb-[4px] text-[14px] font-[400] transition-colors ${
                   active ? "text-accent" : "text-ink-3 hover:text-ink-2"
                 }`}
               >
                 {label}
                 {active && (
-                  <span className="absolute bottom-0 left-0 right-0 h-[1.5px] rounded-full bg-accent" />
+                  <span className="absolute right-0 bottom-0 left-0 h-[1.5px] rounded-full bg-accent" />
                 )}
               </button>
             );
@@ -76,7 +77,9 @@ export function Header({
         <div className="flex items-center gap-2 text-[14px] text-ink-3">
           <button
             type="button"
-            onClick={() => { onNavigate("timeline"); }}
+            onClick={() => {
+              onNavigate("timeline");
+            }}
             className="cursor-pointer hover:text-ink"
           >
             Darric
@@ -104,7 +107,7 @@ export function Header({
       {isMeeting ? (
         <div className="flex items-center gap-2">
           <span className="pulse-dot h-2 w-2 rounded-full bg-danger" />
-          <span className="font-mono text-[11px] uppercase tracking-eyebrow text-ink-3">
+          <span className="font-mono text-[11px] tracking-eyebrow text-ink-3 uppercase">
             RECORDING · {formatTimer(elapsedSeconds)}
           </span>
         </div>
