@@ -110,8 +110,12 @@ export default function App(): React.JSX.Element {
   };
 
   const handleDelete = (id: string): void => {
-    if (id === viewingSessionId) setViewingSessionId(null);
-    void removeSession(id);
+    // Deselect only once the backend has actually deleted it. Doing it up front
+    // drops the user onto the "Select a recording" placeholder for a recording
+    // that is still there whenever the delete fails.
+    void removeSession(id).then((deleted) => {
+      if (deleted) setViewingSessionId((current) => (current === id ? null : current));
+    });
   };
 
   const viewingSession = sessions.find((s) => s.id === viewingSessionId) ?? null;

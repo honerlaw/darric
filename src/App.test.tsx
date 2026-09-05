@@ -697,3 +697,124 @@ describe("App resume placement and availability", () => {
     });
   });
 });
+
+describe("App delete failure handling", () => {
+  const STANDUP = {
+    id: "a",
+    topic: "Standup",
+    started_at: "2024-01-01T09:00:00Z",
+    ended_at: "2024-01-01T09:30:00Z",
+    created_at: "2024-01-01T09:00:00Z",
+    recorded_minutes: 30,
+  };
+
+  function mockFailingDelete(): void {
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [STANDUP],
+      list_capture_devices: () => [],
+      capture_drop_count: () => 0,
+      get_session_transcript: () => [],
+      delete_session: () => {
+        throw new Error("database is locked");
+      },
+    });
+  }
+
+  async function confirmDelete(): Promise<void> {
+    fireEvent.click(await screen.findByRole("button", { name: "Delete Standup" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+  }
+
+  it("shows the reason when a confirmed delete fails", async () => {
+    // The modal has just told the user this removes the recording and cannot be
+    // undone. A delete that silently does nothing reads as an ignored click, so
+    // they press it again — and every retry fails the same silent way.
+    mockFailingDelete();
+    render(<App />);
+    fireEvent.click(await screen.findByText("Standup"));
+
+    await confirmDelete();
+
+    expect(await screen.findByText(/database is locked/)).toBeInTheDocument();
+  });
+
+  it("keeps the recording selected when its delete fails", async () => {
+    // Deselecting up front drops the user onto the placeholder for a recording
+    // that is still in the sidebar.
+    mockFailingDelete();
+    render(<App />);
+    fireEvent.click(await screen.findByText("Standup"));
+    await screen.findByRole("button", { name: /Resume recording/ });
+
+    await confirmDelete();
+
+    await screen.findByText(/database is locked/);
+    expect(screen.queryByText(/Select a recording/)).toBeNull();
+    // Resume acts on the selection, so its presence is the selection surviving.
+    expect(screen.getByRole("button", { name: /Resume recording/ })).toBeInTheDocument();
+  });
+
+  it("does not clobber a selection made while the delete was in flight", async () => {
+    // The deselect now happens when the delete resolves, which opens a window
+    // the up-front version did not have: if the user picks another recording
+    // during it, an unconditional clear would drop that new selection instead.
+    let release = (): void => undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = (): void => {
+        resolve();
+      };
+    });
+    let deleted = false;
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => (deleted ? [PAST_SESSION] : [STANDUP, PAST_SESSION]),
+      list_capture_devices: () => [],
+      capture_drop_count: () => 0,
+      get_session_transcript: () => [],
+      delete_session: async () => {
+        await pending;
+        deleted = true;
+      },
+    });
+    render(<App />);
+
+    fireEvent.click(await screen.findByText("Standup"));
+    await confirmDelete();
+
+    // Switch to "Retro" while the delete of "Standup" is still running.
+    fireEvent.click(screen.getByText("Retro"));
+    await act(async () => {
+      release();
+      await pending;
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByText("Standup")).toBeNull();
+    });
+    // "Retro" is still the selection, not the placeholder.
+    expect(screen.queryByText(/Select a recording/)).toBeNull();
+    expect(screen.getByRole("button", { name: /Resume recording “Retro”/ })).toBeInTheDocument();
+  });
+
+  it("deselects the recording when its delete succeeds", async () => {
+    // The positive control for the assertion above.
+    let deleted = false;
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => (deleted ? [] : [STANDUP]),
+      list_capture_devices: () => [],
+      capture_drop_count: () => 0,
+      get_session_transcript: () => [],
+      delete_session: () => {
+        deleted = true;
+      },
+    });
+    render(<App />);
+    fireEvent.click(await screen.findByText("Standup"));
+
+    await confirmDelete();
+
+    expect(await screen.findByText(/Select a recording/)).toBeInTheDocument();
+  });
+});
