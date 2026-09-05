@@ -42,3 +42,4 @@ resolves.
 ## Related
 
 - [[2026-09-05-reference-claude-md-symlinks-to-agents-md]] — the other unguarded fact about this repo's agent-records layer
+- [[2026-09-05-constraint-aria-modal-promises-inertness-that-nothing-enforces]] — see also

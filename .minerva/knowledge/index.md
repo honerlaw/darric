@@ -11,6 +11,7 @@
 
 ## Bugs
 
+- [[2026-09-05-bug-a-click-targets-the-common-ancestor-of-its-press-and-release]] — the confirmation modal dismissed on a backdrop `click`, but selecting the dialog's own body text and releasing over the dim area dispatches that click on the backdrop — closing the dialog mid-selection, past a `stopPropagation` that could not see it, while a test claimed the case was covered
 - [[2026-09-05-bug-a-losing-rename-became-a-silent-none-transcriber]] — a session started mid-download raced the startup `ensure_model`; the loser's `rename` got `ENOENT`, and `load_transcriber` turned that `Err` into `None`, so capture and metering ran normally while nothing was ever transcribed
 - [[2026-09-05-bug-arc-try-unwrap-after-sharing-fails-silently]] — reclaiming ownership with `Arc::try_unwrap(x).ok()` after clones have been handed out fails deterministically, and `.ok()` turns that failure into a plausible `None` that disables the feature with no error
 - [[2026-09-05-bug-concurrent-model-downloads-share-one-tmp-file]] — startup pre-load and `load_transcriber` both called `ensure_model`, writing one `.tmp` at independent offsets; the mixed result was renamed in and accepted by a bare `exists()` check on every later launch
@@ -25,6 +26,7 @@
 - [[2026-09-05-pattern-an-early-return-can-make-a-feature-unreachable]] — the model-download indicator was complete and correct but rendered below a `session === null` early return, so it could not run in the only state it existed for
 - [[2026-09-05-pattern-auto-merge-on-a-pr-that-can-carry-no-checks]] — `gh pr merge --auto` exiting 0 means auto-merge was enabled, not that anything merged — so on a PR whose required checks can never report it parks the PR forever while the job goes green, where a direct merge would have failed loudly
 - [[2026-09-05-pattern-fixing-one-path-leaves-the-other-one-open]] — transcript lines could land under the wrong recording via a broadcast event _and_ via a slow initial query; the unit fixed the event path the issue named, and review found the query path producing the identical wrong screen
+- [[2026-09-05-pattern-relocating-a-control-drops-the-context-its-mount-point-supplied]] — "Resume recording" moved from the entity-scoped `RecorderPane` into the header and silently lost two things the pane had provided for free — the guarantee that a recording was selected, and any statement of _which_ recording it acts on
 - [[2026-09-05-pattern-shared-state-cannot-be-cleared-for-one-reader]] — `activeSessionId` answered both "which recording is live right now" and "which recording does this post-stop state belong to"; clearing it to fix the first silently destroyed the second, and the fix was to gate the display rather than the state
 - [[2026-09-05-pattern-state-changed-only-in-finally-reads-as-a-dead-click]] — `stop()` awaited a multi-second Tauri command and mutated every piece of UI state in its `finally`, so for the whole call the app rendered exactly as it had while recording — and the button stayed live, so a second press hit a non-idempotent command
 - [[2026-09-05-pattern-ui-rewrites-drop-state-guards-not-markup]] — rewriting a screen from its rendered shape carries the visible markup across but loses per-selection state resets and cross-entity guards — the parts with no visual counterpart
@@ -32,6 +34,7 @@
 
 ## Constraints
 
+- [[2026-09-05-constraint-aria-modal-promises-inertness-that-nothing-enforces]] — adding `aria-modal` without focus containment tells assistive technology the background is unreachable while Tab still walks straight out of the dialog into live controls behind the backdrop — three Tabs from the delete prompt reached Record, where Enter starts a recording
 - [[2026-09-05-constraint-phases-must-use-the-canonical-list-form]] — `read_phases` stops at the next `#` line, so writing phases as `### 1. Name` subsections parses as zero phases — the unit ships as unphased and its later phases are stranded with no error
 - [[2026-09-05-constraint-tauri-events-from-setup-reach-no-webview]] — `emit` only reaches webviews already holding a listener, so anything emitted during `setup()` is lost and needs a command the frontend can poll on mount
 

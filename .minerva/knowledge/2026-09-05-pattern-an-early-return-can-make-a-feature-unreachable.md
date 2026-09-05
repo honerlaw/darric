@@ -54,3 +54,4 @@ rendered from `App`, above the pane, where the state it displays actually lives.
 - [[2026-09-05-constraint-tauri-events-from-setup-reach-no-webview]] — see also
 - [[2026-09-05-pattern-state-changed-only-in-finally-reads-as-a-dead-click]] — see also
 - [[2026-09-05-pattern-fixing-one-path-leaves-the-other-one-open]] — see also
+- [[2026-09-05-pattern-relocating-a-control-drops-the-context-its-mount-point-supplied]] — see also

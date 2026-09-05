@@ -48,3 +48,4 @@ defect is in the shape of the question.
 - [[2026-09-05-decision-capture-engine-requires-a-transcriber]] — see also
 - [[2026-09-05-pattern-an-early-return-can-make-a-feature-unreachable]] — see also
 - [[2026-09-05-pattern-state-changed-only-in-finally-reads-as-a-dead-click]] — see also
+- [[2026-09-05-bug-a-click-targets-the-common-ancestor-of-its-press-and-release]] — see also

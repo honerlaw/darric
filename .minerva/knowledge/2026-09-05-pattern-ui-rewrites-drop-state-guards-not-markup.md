@@ -49,3 +49,5 @@ entities and a switch between them to appear at all.
 - [[2026-09-05-decision-strip-darric-to-a-recorder]] — the rewrite that produced both regressions
 - [[2026-09-05-pattern-an-early-return-can-make-a-feature-unreachable]] — see also
 - [[2026-09-05-pattern-shared-state-cannot-be-cleared-for-one-reader]] — see also
+- [[2026-09-05-bug-a-click-targets-the-common-ancestor-of-its-press-and-release]] — see also
+- [[2026-09-05-pattern-relocating-a-control-drops-the-context-its-mount-point-supplied]] — see also
