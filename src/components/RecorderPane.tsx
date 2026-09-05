@@ -14,6 +14,9 @@ interface RecorderPaneProps {
   session: Session | null;
   transcriptLines: TranscriptLine[];
   devices: CaptureDevice[];
+  onToggleDevice: (id: string, enabled: boolean) => void;
+  /** Segments discarded because transcription fell behind real time. */
+  droppedSegments: number;
   isRecording: boolean;
   isStarting: boolean;
   /** False while any recording is in flight — resuming a second one would be rejected. */
@@ -28,6 +31,8 @@ export function RecorderPane({
   session,
   transcriptLines,
   devices,
+  onToggleDevice,
+  droppedSegments,
   isRecording,
   isStarting,
   canResume,
@@ -111,7 +116,7 @@ export function RecorderPane({
           {isRecording ? `${formatElapsed(elapsedSeconds)} elapsed` : "stopped"}
         </div>
 
-        <DeviceRow devices={devices} />
+        <DeviceRow devices={devices} onToggle={onToggleDevice} />
       </div>
 
       <div className="flex-1 overflow-y-auto border-t border-line px-10 py-5">
@@ -129,6 +134,14 @@ export function RecorderPane({
           </div>
         )}
 
+        {droppedSegments > 0 && (
+          <p className="mb-4 font-mono text-[11px] text-danger">
+            Transcription fell behind — {String(droppedSegments)} segment
+            {droppedSegments === 1 ? "" : "s"} dropped. Audio was captured; some speech is missing
+            from the transcript.
+          </p>
+        )}
+
         {transcriptLines.length === 0 ? (
           <p className="text-[14px] text-ink-4 italic">
             {emptyTranscriptMessage(isRecording, isStarting)}
@@ -139,10 +152,16 @@ export function RecorderPane({
               <div
                 key={line.id}
                 className="grid gap-x-[14px]"
-                style={{ gridTemplateColumns: "52px 1fr" }}
+                style={{ gridTemplateColumns: "52px 120px 1fr" }}
               >
                 <span className="pt-[3px] font-mono text-[11px] text-ink-3">
                   {formatTime(line.recorded_at)}
+                </span>
+                <span
+                  className="truncate pt-[3px] font-mono text-[11px] text-accent"
+                  title={`${line.device_name} (${line.direction})`}
+                >
+                  {line.device_name}
                 </span>
                 <p className="font-sans text-[15px] leading-[1.6] text-ink-2">
                   {line.content}

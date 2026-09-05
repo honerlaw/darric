@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { Session, TranscriptChunk, TranscriptLine } from "../types";
+import type { CaptureDevice, Session, TranscriptChunk, TranscriptLine } from "../types";
 
 // Sessions
 export const startSession = async (topic?: string): Promise<string> =>
@@ -18,6 +18,14 @@ export const updateSession = async (id: string, topic?: string): Promise<Session
   invoke<Session>("update_session", { id, topic });
 export const resumeSession = async (id: string): Promise<string> =>
   invoke<string>("resume_session", { id });
+
+// Capture devices
+export const listCaptureDevices = async (): Promise<CaptureDevice[]> =>
+  invoke<CaptureDevice[]>("list_capture_devices");
+export const setDeviceEnabled = async (id: string, enabled: boolean): Promise<void> => {
+  await invoke("set_device_enabled", { id, enabled });
+};
+export const captureDropCount = async (): Promise<number> => invoke<number>("capture_drop_count");
 
 // Settings
 export const saveSetting = async (key: string, value: string): Promise<void> => {

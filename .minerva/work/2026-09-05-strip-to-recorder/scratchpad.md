@@ -118,3 +118,152 @@ textbox present, but the mutation experiment was not run.
 - `knowledge_lint.py`: 0 errors, 9 warnings, all `pending reconciliation` — the expected add-only shape. The supersession banners satisfied the reciprocal check for the four superseded entries, so only the five genuinely new forward links are unreciprocated.
 
 - [decided] proposal `## Phases` was written as `### N. Name` subsections, which `read_phases` parses as ZERO phases because its scan breaks at the next `#` line. Ship would have treated a 3-phase unit as unphased and cleanup would have torn down the worktree after phase 1, stranding phases 2-3 with no error anywhere. Rewritten to the canonical numbered-list form (verified: 3 phases now parse) and promoted as `2026-09-05-constraint-phases-must-use-the-canonical-list-form`. Formatting fix to match a documented contract, not a plan change — not a replan trigger.
+
+## Phase 2 implementation notes 2026-09-05
+
+### The pool-sizing question is answered — and the answer changes the design's emphasis
+
+The proposal left open whether concurrent `state.full()` calls against one shared
+`WhisperContext` parallelise on a single Metal GPU. `transcription::bench::pool_sizing_measurement`
+now measures it: four 8-second segments, serial then concurrent, on Apple Silicon with `small.en`.
+
+- serial: **1.746 s**
+- parallel (4 threads): **1.537 s**
+- **speedup: 1.14x from 4x the threads**
+
+Inference is effectively serialised on the GPU; the ~14% is CPU-side pre/post-processing
+overlapping. So the worker pool is **not** a throughput device, and `WHISPER_WORKERS = 2` recovers
+essentially all of the available gain. What actually protects a recording when transcription falls
+behind is the queue's drop-oldest policy — exactly what the proposal predicted would carry the
+design if this measurement came back flat. Measured with `small.en` because that is what was
+downloaded; the serialisation conclusion is a property of the GPU queue and should hold for
+`large-v3-turbo`, but the absolute timings will not.
+
+### Two `unsafe` blocks removed rather than carried forward
+
+`SendableStream` existed only because the old code built a `cpal::Stream` on one thread and moved
+it to another, which needed `unsafe impl Send` plus an `#[allow(clippy::non_send_fields_in_send_ty)]`.
+Each source's supervisor thread now builds, watches and drops its own stream, so the stream never
+crosses a thread boundary and the unsafety is gone — not asserted past. `unsafe impl Send/Sync for
+Transcriber` remains; it is whisper-rs's own soundness claim, not ours.
+
+### The lint ceiling is now actually met
+
+Clippy reports **0 warnings** across `--all-targets` with `pedantic` + `nursery` + `cargo` enabled —
+`main` had 4. All five inherited `#[allow]` sites are gone: the resampler carries its position as
+fixed-point integers instead of casting a float cursor back to an index (which also removes
+accumulating drift, so it is a correctness improvement rather than lint appeasement), `rms`
+accumulates its sample count as `f32`, and the model-download progress logs in whole megabytes.
+
+`cargo clippy --fix` rewrote `wait - slept` as `wait.checked_sub(slept).unwrap()` — trading a
+possible panic for a certain one, and putting an `unwrap` in production code. Replaced with
+`saturating_sub`. Worth remembering that `--fix` optimises for silencing the lint, not for the
+better program.
+
+### Dead code was deleted rather than allowed
+
+The first cut included an `ExclusionRegistry` for phase 3's own-device filtering, plus
+`default_input_name`, `state_label` and `queued`. None had a caller, so all of them tripped
+`dead_code` — and the policy forbids `#[allow]`. They were removed. Phase 3 adds the exclusion
+filter when it has a first caller; the requirement is recorded in the proposal and in a module-level
+comment in `audio/device.rs`, which is where someone building the tap will actually be reading.
+
+### Two tests hung and had to be reclassified
+
+`enumeration_yields_unique_stable_ids` and `an_absent_device_gives_up_without_hanging_the_caller`
+both drive real Core Audio enumeration, and under `cargo test`'s parallel execution they hung for
+over 60 seconds and held the target lock. Both are now `#[ignore]`d with the reason stated. They
+test `cpal` and the machine's hardware, not this crate's logic, and the pure state transitions are
+covered without hardware. A hanging test is worse than a failing one: it produces no verdict.
+
+Also of note: `timeout` does not exist on macOS (it is `gtimeout`, from coreutils), so two
+verification runs silently produced nothing at all rather than failing loudly.
+
+### Findings pending promote (phase 2)
+
+- **`phasing.md`'s phase-progress snippet is wrong for a squash-merging repo.** It feeds
+  `phase_progress()` from `git branch --merged <default>`. PR #7 was squash-merged, so phase 1's
+  commits never landed on `main` as themselves and `--merged` cannot see that branch at all —
+  `phase_progress` reported `merged: 0` for a phase that had shipped. `merge-detection.md` already
+  knows about squash merges and checks `gh pr list --state merged` first; the phasing snippet does
+  not. A unit shipping its phases on a squash-merging repo would re-ship phase 1 forever. Candidate
+  `bug` entry against the minerva tooling.
+- **A freshly cut phase branch with zero commits reads as "merged"**, because it is identical to
+  the default branch. Combined with the above, phase resolution is only trustworthy once the phase
+  has at least one commit. Worth folding into the same entry.
+
+## Review finding 2026-09-05 (phase 2)
+
+Reviewed on two lenses again. The minerva audit caught one spec-fidelity miss: the proposal said
+phase 2 drops `speaker_tracker.rs` **and** `rustfft`, and only the file had gone — an unused Rust
+dependency compiles fine, so nothing but reading the spec back against the diff would have found
+it. Removed; Rust dependencies are now 13, down from 18 before the strip.
+
+The audit also re-checked whether phase 2's second rewrite of `RecorderPane`/`App` repeated the
+mistake `2026-09-05-pattern-ui-rewrites-drop-state-guards-not-markup` documents. It did not: the
+`[sessionId]` reset, the `canResume` gate and the error banner all survived. The entry earned its
+keep on the very next change to those files.
+
+The code review found four defects, all triaged FIX and all fixed.
+
+### 1. HIGH — `Arc::try_unwrap` silently disabled the entire transcription pool
+
+`CaptureEngine::start` wrapped the pool in an `Arc`, handed a clone to each device's capture
+thread, and then called `Arc::try_unwrap(pool)` to reclaim ownership for the struct field. With N
+devices the strong count is `1 + N`, and `begin_capture` refuses to start with zero devices — so
+`try_unwrap` failed **on every real recording**, `.ok().flatten()` turned that into `None`, and the
+engine stored no pool at all while the real one stayed alive inside the thread closures.
+
+Three consequences, all silent and all deterministic:
+
+- `stop()`'s flush block is guarded by `if let Some(pool)`, so **every device's trailing partial
+  segment was discarded on every stop** — up to 8 seconds of real speech per device per recording.
+  The frontend's `FLUSH_LINGER_MS` exists precisely to wait for that chunk, so the two halves of
+  the design disagreed with each other and nothing failed loudly.
+- `dropped_segments()` always returned 0, so the drop warning could never appear — the honesty
+  mechanism built specifically to avoid a silently incomplete transcript was itself silently
+  disabled.
+- `pool.shutdown()` was never called, so the whisper workers stayed parked in `Condvar::wait`
+  forever and their `JoinHandle`s were dropped without joining: **two leaked threads per
+  recording session**.
+
+Fixed by changing `TranscriptionPool::shutdown` to take `&self` (joining through a
+`Mutex<Vec<JoinHandle>>`, drained so it is idempotent) and having the engine hold
+`Option<Arc<TranscriptionPool>>` rather than trying to reclaim sole ownership. The type now makes
+the bug unexpressible instead of relying on a runtime unwrap that always fails.
+
+Worth noting that the completion Verifier explicitly checked the _ordering_ inside `stop()` and
+pronounced it correct — which it was. The ordering was right and the guard above it was never
+true. Verifying a sequence of steps says nothing about whether the block containing them runs.
+
+### 2. MEDIUM — `stop_session` blocked a Tokio worker
+
+An `async fn` command called the synchronous, thread-joining `engine.stop()` directly. Masked
+while bug 1 was live (there was nothing to join); the moment 1 was fixed it would block a runtime
+worker for as long as the queue took to drain — seconds, with several devices, since inference
+serialises on the GPU. Now wrapped in `spawn_blocking`.
+
+### 3. LOW — a spawn failure mid-loop leaked already-started capture threads
+
+If `thread::Builder::spawn` failed for device N, the function returned `Err` before constructing
+the engine, so the N−1 threads already running had no handle able to stop them. Now sets the
+shutdown flag, joins what started, and shuts the pool down before returning.
+
+### 4. LOW — an optimistic device toggle could desynchronise
+
+`useDevices.toggle` awaited the IPC call without catching, and its only caller discards the
+promise with `void`, so a failed toggle became an unhandled rejection and could leave the switch
+showing a state the backend rejected. Now caught and logged; the `finally` refresh re-reads truth.
+
+### Findings pending promote (phase 2 review)
+
+- The `Arc::try_unwrap`-after-sharing pattern is worth an entry: it fails silently, it is
+  guaranteed rather than racy once anything else holds a clone, and `.ok()` converts the failure
+  into a plausible-looking `None`.
+
+## Balanced decisions 2026-09-05 (phase 2)
+
+- [reviewed — clean] completion verification, phase 2: Verifier verdict `accept`. It independently re-ran clippy, the full suite, the ignored hardware tests and the migration-list agreement check, and confirmed the pool-sizing comment matches the benchmark rather than being fabricated. Two non-blocking fix-ups folded: a stale download log still naming `ggml-small.en-tdrz.bin (~466MB)` after the model swap, and the last `#[allow(clippy::unwrap_used)]` sitting in `mod bench` rather than literally `mod tests` — resolved by replacing the unwraps with `expect`, leaving **zero** `#[allow]` anywhere.
+- [decided] review triage, phase 2: 4 findings, all FIX, all fixed. One HIGH (`Arc::try_unwrap` disabling the pool) with a writable failure scenario — trailing segment lost on every stop, drop counter pinned at 0, two leaked threads per session. Two LOW with concrete scenarios (spawn-failure thread orphaning, unhandled toggle rejection) fixed rather than deferred because both were cheap and both leave the app in a state a user cannot recover from. One MEDIUM (blocking a Tokio worker in `stop_session`) fixed in the same pass because bug 1 was masking it.
+- [decided] promote partition, Mode B (phase 3 outstanding, so no Mode A pass yet). PROMOTE x4: the `Arc::try_unwrap` bug, the verification-shape pattern it exposed, the Metal serialisation measurement, and the `phase_progress` squash-merge bug found while shipping phase 1. DISCARD: routine gate logs.
+- [decided] the `phase_progress` finding is promoted even though it is a defect in minerva's own tooling rather than in darric. It was found here, it will bite the next phased unit in any squash-merging repo, and `.minerva/knowledge/` is where this project records what it learned — including about its own process.
