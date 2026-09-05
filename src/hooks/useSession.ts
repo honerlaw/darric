@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type Dispatch,
-  type SetStateAction,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   deleteSession,
   listSessions,
@@ -25,9 +18,15 @@ import type { Session } from "../types";
 interface UseSessionReturn {
   sessions: Session[];
   activeSessionId: string | null;
-  setActiveSessionId: Dispatch<SetStateAction<string | null>>;
   isRecording: boolean;
   isStarting: boolean;
+  /**
+   * The recording a start is in flight *for*: the id when resuming, `null` when
+   * starting a fresh one (no session exists until `start_session` returns).
+   * Callers scope "Starting…" to the right recording with this rather than with
+   * `activeSessionId`, which is not assigned until the start has finished.
+   */
+  startingSessionId: string | null;
   isStopping: boolean;
   modelReady: boolean;
   downloadProgress: number | null;
@@ -43,9 +42,15 @@ interface UseSessionReturn {
 
 export function useSession(): UseSessionReturn {
   const [sessions, setSessions] = useState<Session[]>([]);
+  // The most recently active recording — deliberately NOT cleared on stop. It
+  // outlives the recording so post-stop state can still be attributed to the
+  // session it belongs to (the dropped-segment warning is read after
+  // `isRecording` goes false). Anything meaning "recording right now" must
+  // conjoin `isRecording` rather than read this alone.
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [startingSessionId, setStartingSessionId] = useState<string | null>(null);
   const [isStopping, setIsStopping] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -177,6 +182,7 @@ export function useSession(): UseSessionReturn {
     async (id: string): Promise<void> => {
       try {
         setIsStarting(true);
+        setStartingSessionId(id);
         setError(null);
         await resumeSession(id);
         setActiveSessionId(id);
@@ -190,6 +196,11 @@ export function useSession(): UseSessionReturn {
         setError(String(e));
       } finally {
         setIsStarting(false);
+        // Only clear the id this call set. `canResume` stays true for the whole
+        // resume, so a second one can start while this is in flight — clearing
+        // unconditionally would drop the later resume's "Starting…" while it is
+        // still starting.
+        setStartingSessionId((current) => (current === id ? null : current));
       }
     },
     [refresh],
@@ -215,9 +226,9 @@ export function useSession(): UseSessionReturn {
   return {
     sessions,
     activeSessionId,
-    setActiveSessionId,
     isRecording,
     isStarting,
+    startingSessionId,
     isStopping,
     modelReady,
     downloadProgress,

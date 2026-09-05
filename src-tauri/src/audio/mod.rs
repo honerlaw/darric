@@ -298,15 +298,64 @@ fn persist_and_emit(db: &Arc<DbConn>, app: &AppHandle, session_id: &str, line: &
             log::error!("[audio] failed to persist transcript line: {e}");
         }
     }
-    app.emit(
-        "transcript_chunk",
-        serde_json::json!({
-            "device_id": line.device_id,
-            "device_name": line.device_name,
-            "direction": line.direction.as_str(),
-            "content": line.text,
-            "recorded_at": now,
-        }),
-    )
-    .ok();
+    app.emit("transcript_chunk", chunk_payload(session_id, line, &now))
+        .ok();
+}
+
+/// The `transcript_chunk` event payload.
+///
+/// Split out from the emit so the wire contract is reachable from a test —
+/// `AppHandle` is not constructible in one. `session_id` is the load-bearing
+/// field: the frontend keeps this listener alive past the end of a recording to
+/// catch whisper's asynchronous flush, and it filters on this id to tell a late
+/// chunk for the session that just stopped from one for the session now on
+/// screen. Dropping the field does not fail loudly — the frontend's filter would
+/// match nothing and silently stop appending every live line.
+fn chunk_payload(session_id: &str, line: &TranscribedLine, now: &str) -> serde_json::Value {
+    serde_json::json!({
+        "session_id": session_id,
+        "device_id": line.device_id,
+        "device_name": line.device_name,
+        "direction": line.direction.as_str(),
+        "content": line.text,
+        "recorded_at": now,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::transcription::pool::Direction;
+
+    fn line() -> TranscribedLine {
+        TranscribedLine {
+            device_id: "dev-1".to_string(),
+            device_name: "MacBook Microphone".to_string(),
+            direction: Direction::Input,
+            text: "hello there".to_string(),
+        }
+    }
+
+    #[test]
+    fn chunk_payload_names_its_session() {
+        // The frontend drops any chunk whose session_id does not match the
+        // session on screen. Without this field every live line is filtered out
+        // and the transcript silently stops updating - no error anywhere.
+        let payload = chunk_payload("session-42", &line(), "2024-01-01T09:00:05Z");
+
+        assert_eq!(payload["session_id"], "session-42");
+    }
+
+    #[test]
+    fn chunk_payload_carries_the_fields_the_frontend_reads() {
+        // TranscriptChunk in src/types/index.ts. A renamed or dropped key here
+        // reaches the UI as undefined rather than as a build failure.
+        let payload = chunk_payload("session-42", &line(), "2024-01-01T09:00:05Z");
+
+        assert_eq!(payload["device_id"], "dev-1");
+        assert_eq!(payload["device_name"], "MacBook Microphone");
+        assert_eq!(payload["direction"], "input");
+        assert_eq!(payload["content"], "hello there");
+        assert_eq!(payload["recorded_at"], "2024-01-01T09:00:05Z");
+    }
 }

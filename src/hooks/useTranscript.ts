@@ -15,7 +15,14 @@ export function useTranscript(sessionId: string | null, isLive: boolean): Transc
     sessionRef.current = sessionId;
     setLines([]);
     if (sessionId === null) return;
-    void getSessionTranscript(sessionId).then(setLines);
+    // Same attribution the chunk filter below applies, on the other path in:
+    // a slow fetch for the previously-selected session must not land in the pane
+    // that replaced it. Guarded on the ref rather than an abort flag so a
+    // re-selection of the same session still shows the response it already has.
+    void getSessionTranscript(sessionId).then((fetched) => {
+      if (sessionRef.current !== sessionId) return;
+      setLines(fetched);
+    });
   }, [sessionId]);
 
   useEffect(() => {
@@ -23,11 +30,25 @@ export function useTranscript(sessionId: string | null, isLive: boolean): Transc
     prevIsLiveRef.current = isLive;
 
     const appendChunk = (chunk: TranscriptChunk): void => {
+      // The chunk says which session it belongs to, so a late flush line for a
+      // recording the user has clicked away from is dropped rather than appended
+      // under whatever is now selected.
+      //
+      // Capturing the id when the listener is attached covers only one of the two
+      // ways the selection moves. Clicking away *during* a recording changes
+      // `sessionId` and `isLive` in the same render, and the `[sessionId]` effect
+      // above is declared first — so the capture reads the new session and the
+      // guard passes for chunks belonging to the old one. (Clicking away during
+      // the post-stop linger is the benign case: `isLive` is already false, this
+      // effect does not re-run, and a captured id would still be correct.) An
+      // identity on the payload covers both without depending on which render
+      // ran what.
+      if (chunk.session_id !== sessionRef.current) return;
       setLines((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
-          session_id: sessionRef.current ?? "",
+          session_id: chunk.session_id,
           device_id: chunk.device_id,
           device_name: chunk.device_name,
           direction: chunk.direction,

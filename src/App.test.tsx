@@ -324,3 +324,279 @@ describe("App stop feedback", () => {
     });
   });
 });
+
+describe("App session-scoped UI state", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** The pulsing "recording now" dots inside the recordings sidebar only. */
+  function sidebarDots(container: HTMLElement): number {
+    return container.querySelectorAll("aside .pulse-dot").length;
+  }
+
+  it("clears the sidebar's live dot once the recording stops", async () => {
+    // `activeSessionId` deliberately outlives the recording — the dropped-segment
+    // warning is attributed with it — so the dot has to be gated on `isRecording`
+    // at the point of display rather than by clearing the id.
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [LIVE_SESSION],
+      list_capture_devices: () => [],
+      capture_drop_count: () => 0,
+      get_session_transcript: () => [],
+      start_session: () => "live",
+      stop_session: () => undefined,
+    });
+    const { container } = render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Record/ }));
+    await screen.findByRole("button", { name: /Stop$/ });
+    expect(sidebarDots(container)).toBe(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /Stop$/ }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Record/ })).toBeEnabled();
+    });
+
+    expect(sidebarDots(container)).toBe(0);
+  });
+
+  it("keeps the dot on the active recording, not the selected one", async () => {
+    // A count alone cannot tell "the dot is on the right row" from "a dot exists
+    // somewhere" — with one session on screen both readings pass.
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [LIVE_SESSION, PAST_SESSION],
+      list_capture_devices: () => [],
+      capture_drop_count: () => 0,
+      get_session_transcript: () => [],
+      start_session: () => "live",
+      stop_session: () => undefined,
+    });
+    const { container } = render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Record/ }));
+    await screen.findByRole("button", { name: /Stop$/ });
+    // Select the OTHER recording while the first is still running.
+    fireEvent.click(screen.getByText("Retro"));
+
+    const rowFor = (label: string): Element | null | undefined =>
+      Array.from(container.querySelectorAll("aside button")).find(
+        (b) => b.textContent?.includes(label) ?? false,
+      );
+    const active = rowFor("Standup");
+    const selected = rowFor("Retro");
+    expect(active).toBeDefined();
+    expect(selected).toBeDefined();
+    expect(active?.querySelector(".pulse-dot")).not.toBeNull();
+    expect(selected?.querySelector(".pulse-dot")).toBeNull();
+  });
+
+  it("darkens the sidebar dot for the stopping window too", async () => {
+    // Every other consumer of this state checks `isStopping` first. A dot still
+    // pulsing "recording now" while the header reads "finishing" is the same
+    // complaint the previous unit fixed everywhere else.
+    const { release } = mockPendingStop();
+    const { container } = render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Record/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /Stop$/ }));
+    await screen.findByRole("button", { name: /Stopping…/ });
+
+    expect(container.querySelectorAll("aside .pulse-dot")).toHaveLength(0);
+
+    release();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Record/ })).toBeEnabled();
+    });
+  });
+
+  it("does not carry a dropped-segment warning into the next recording", async () => {
+    // The count is attributed by `activeSessionId` and outlives its recording by
+    // design, so it must be dropped when a different recording becomes active.
+    vi.useFakeTimers();
+    let dropped = 12;
+    let started = 0;
+    mockCommands({
+      model_download_state: () => null,
+      // Two distinct recordings, as two `start_session` calls really produce —
+      // the reset is keyed on the session changing, so resuming the *same* one
+      // deliberately keeps its warning.
+      list_sessions: () => [LIVE_SESSION, { ...LIVE_SESSION, id: "live-2" }],
+      list_capture_devices: () => [],
+      get_session_transcript: () => [],
+      capture_drop_count: () => dropped,
+      start_session: () => {
+        started += 1;
+        return started === 1 ? "live" : "live-2";
+      },
+      stop_session: () => undefined,
+    });
+    render(<App />);
+
+    const settle = async (ms: number): Promise<void> => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ms);
+      });
+    };
+
+    await settle(0);
+    fireEvent.click(screen.getByRole("button", { name: /Record/ }));
+    await settle(0);
+    await settle(2100);
+    expect(screen.getByText(/Transcription fell behind/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Stop$/ }));
+    await settle(0);
+    // The warning survives the stop — that is the previous unit's fix.
+    expect(screen.getByText(/Transcription fell behind/)).toBeInTheDocument();
+
+    // A second recording starts with a clean slate; its own poll has not run yet.
+    dropped = 0;
+    fireEvent.click(screen.getByRole("button", { name: /Record/ }));
+    await settle(0);
+
+    expect(screen.queryByText(/Transcription fell behind/)).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it("does not tell a selected past recording that it is starting", async () => {
+    // `isStarting` is global. The header is right to report the start; the pane
+    // of an unrelated selected recording is not.
+    let release = (): void => undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = (): void => {
+        resolve();
+      };
+    });
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [LIVE_SESSION, PAST_SESSION],
+      list_capture_devices: () => [],
+      capture_drop_count: () => 0,
+      get_session_transcript: () => [],
+      start_session: async () => {
+        await pending;
+        return "live";
+      },
+    });
+    render(<App />);
+
+    fireEvent.click(await screen.findByText("Retro"));
+    await screen.findByText(/No transcript for this recording/);
+
+    fireEvent.click(screen.getByRole("button", { name: /Record/ }));
+
+    // The header reports the start — that part is correct and must keep working.
+    await screen.findByRole("button", { name: /Starting…/ });
+    // "Retro" is not the recording being started, so its pane must not claim to be.
+    // Scoped to the pane's own <p>; the header's label is the span above.
+    expect(screen.queryByText(/Starting…/, { selector: "p" })).toBeNull();
+    expect(screen.getByText(/No transcript for this recording/)).toBeInTheDocument();
+
+    release();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Stop$/ })).toBeInTheDocument();
+    });
+  });
+
+  it("tells only the resumed recording that it is starting", async () => {
+    // The session-scoping half of the gate: without it, resuming A while viewing
+    // B labels B. Both other #22 tests pass with that half deleted.
+    let release = (): void => undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = (): void => {
+        resolve();
+      };
+    });
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [LIVE_SESSION, PAST_SESSION],
+      list_capture_devices: () => [],
+      capture_drop_count: () => 0,
+      get_session_transcript: () => [],
+      resume_session: async () => {
+        await pending;
+        return "past";
+      },
+    });
+    render(<App />);
+
+    // Resume "Retro", then look at "Standup" while that resume is in flight.
+    fireEvent.click(await screen.findByText("Retro"));
+    fireEvent.click(await screen.findByRole("button", { name: /Resume recording/ }));
+    fireEvent.click(screen.getByText("Standup"));
+
+    await screen.findByRole("button", { name: /Starting…/ });
+    expect(screen.queryByText(/Starting…/, { selector: "p" })).toBeNull();
+
+    release();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Stop$/ })).toBeInTheDocument();
+    });
+  });
+
+  it("releases the starting session once the resume finishes", async () => {
+    // `startingSessionId` is a ref-like latch on identity: never cleared, a
+    // finished-and-stopped recording reselected with an empty transcript reads
+    // "Starting…" forever.
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [PAST_SESSION],
+      list_capture_devices: () => [],
+      capture_drop_count: () => 0,
+      get_session_transcript: () => [],
+      resume_session: () => "past",
+      stop_session: () => undefined,
+    });
+    render(<App />);
+
+    fireEvent.click(await screen.findByText("Retro"));
+    fireEvent.click(await screen.findByRole("button", { name: /Resume recording/ }));
+    await screen.findByRole("button", { name: /Stop$/ });
+
+    fireEvent.click(screen.getByRole("button", { name: /Stop$/ }));
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Record/ })).toBeEnabled();
+    });
+
+    expect(screen.queryByText(/Starting…/, { selector: "p" })).toBeNull();
+    expect(screen.getByText(/No transcript for this recording/)).toBeInTheDocument();
+  });
+
+  it("still tells the resumed recording that it is starting", async () => {
+    // The regression guard for the fix above. Reusing the obvious
+    // `viewingSessionId === activeSessionId` gate would have passed the previous
+    // test while silently removing this — `activeSessionId` is not assigned until
+    // the resume returns, so that gate reads false for the whole operation.
+    let release = (): void => undefined;
+    const pending = new Promise<void>((resolve) => {
+      release = (): void => {
+        resolve();
+      };
+    });
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [PAST_SESSION],
+      list_capture_devices: () => [],
+      capture_drop_count: () => 0,
+      get_session_transcript: () => [],
+      resume_session: async () => {
+        await pending;
+        return "past";
+      },
+    });
+    render(<App />);
+
+    fireEvent.click(await screen.findByText("Retro"));
+    fireEvent.click(await screen.findByRole("button", { name: /Resume recording/ }));
+
+    expect(await screen.findByText(/Starting…/, { selector: "p" })).toBeInTheDocument();
+
+    release();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /Stop$/ })).toBeInTheDocument();
+    });
+  });
+});

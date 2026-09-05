@@ -20,6 +20,7 @@ export interface TranscriptLine {
 }
 
 export interface TranscriptChunk {
+  session_id: string;
   device_id: string;
   device_name: string;
   direction: Direction;

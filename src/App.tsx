@@ -20,6 +20,7 @@ export default function App(): React.JSX.Element {
     activeSessionId,
     isRecording,
     isStarting,
+    startingSessionId,
     isStopping,
     downloadProgress,
     elapsedSeconds,
@@ -57,6 +58,14 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     if (isRecording && activeSessionId !== null) setViewingSessionId(activeSessionId);
   }, [isRecording, activeSessionId]);
+
+  // The count is attributed by `activeSessionId` and deliberately outlives its
+  // recording, so it has to be dropped when a different one becomes active —
+  // otherwise the previous recording's warning shows on the new one's pane until
+  // the first poll overwrites it.
+  useEffect(() => {
+    setDroppedSegments(0);
+  }, [activeSessionId]);
 
   // Stops at the click, not at the end of the stop. `capture_drop_count` reads
   // the engine, and `stop_session` takes it synchronously on entry — so every
@@ -126,7 +135,7 @@ export default function App(): React.JSX.Element {
         <RecordingList
           sessions={sessions}
           selectedId={viewingSessionId}
-          activeId={activeSessionId}
+          activeId={isRecording && !isStopping ? activeSessionId : null}
           onSelect={setViewingSessionId}
           onDelete={handleDelete}
         />
@@ -139,7 +148,7 @@ export default function App(): React.JSX.Element {
           }}
           droppedSegments={viewingSessionId === activeSessionId ? droppedSegments : 0}
           isRecording={isRecording && viewingSessionId === activeSessionId}
-          isStarting={isStarting}
+          isStarting={startingSessionId !== null && viewingSessionId === startingSessionId}
           isStopping={isStopping && viewingSessionId === activeSessionId}
           elapsedSeconds={elapsedSeconds}
           canResume={!isRecording && downloadProgress === null}
