@@ -1,6 +1,8 @@
 # Test MCP query functions inline (`#[cfg(test)] mod tests`), not via `tests/`
 
 **Date**: 2026-05-18
+**Type**: decision
+**Summary**: MCP query tests live inline under `#[cfg(test)] mod tests`; `tests/` cannot reach the crate-internal `mcp_server` module without making it `pub`
 **Context**: .minerva/work/2026-05-19-mcp-server
 
 ## Context
@@ -23,3 +25,7 @@ Tests for `mcp_server::service::queries` live inline in `queries.rs` under `#[cf
 - When a new migration lands, **two** places need updating: `src/db/migrations.rs` (production) and the `include_str!` chain in `src-tauri/tests/common/mod.rs` AND in `mcp_server/service/queries.rs`'s test module. There's no shared helper.
 - Other modules following this pattern (testing crate-internal functions that take internal types) should also go inline rather than expand the public API.
 - If the duplication of migration-loading becomes a maintenance burden, the right refactor is a `#[cfg(test)] pub(crate) fn test_db()` helper somewhere reachable from both inline and integration tests — not making `mcp_server` `pub`.
+
+## Related
+- [[2026-05-19-decision-tool-handler-router-pattern]] — also decided by this repo's no-`#[allow]`-outside-tests policy
+- [[2026-05-19-decision-spawn-blocking-for-rusqlite-tools]] — covers the same sync query layer that the tool handlers offload

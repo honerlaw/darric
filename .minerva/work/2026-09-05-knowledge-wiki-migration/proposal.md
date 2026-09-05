@@ -1,7 +1,7 @@
 # Proposal: knowledge-wiki-migration
 
 **Date**: 2026-09-05
-**Status**: Draft
+**Status**: Shipped (2026-09-05)
 
 ## Goal
 
@@ -97,6 +97,18 @@ catalog line per entry, matching `CATALOG_LINE_RE` and the `SECTION_TO_TYPE` map
 The work-unit rename and its four `**Context**` rewrites were applied to the working tree
 before this unit existed; they are committed here rather than left dangling on `main`.
 
+### What actually happened
+
+Executed as designed. Three details worth recording:
+
+- `.minerva/decisions/.gitkeep` was **removed**, not carried across: `.minerva/knowledge/`
+  holds five tracked files, so nothing needs to hold the directory open. The now-empty
+  `.minerva/decisions/` was `rmdir`-ed at review.
+- Success criterion 4 was amended mid-work — it was unsatisfiable as written. See `replan.md`.
+- Two `reference` entries were promoted out of review (the CI gap and the `CLAUDE.md`
+  symlink), so the shipped corpus is **6** entries, not 4, and `index.md` carries a
+  `## References` section alongside `## Decisions`.
+
 ### Rejected alternatives
 
 - **Delegate the scaffold to `minerva:init`.** Init is not in this orchestrator's
@@ -117,8 +129,13 @@ before this unit existed; they are committed here rather than left dangling on `
    `entries_without_related: []`, `index_present: true`.
 3. `knowledge_lint.py` exits with **zero errors** (pending-reconciliation warnings are
    normal — they are `minerva:cleanup`'s job on the default branch).
-4. No `.md` file in the repo references `.minerva/decisions/` or a `../../decisions/`
-   relative path.
+4. No **live** pointer to the old layout survives: no `.md` file outside this unit's own
+   record resolves a reader to `.minerva/decisions/` or a `../../decisions/` relative
+   path. Historical prose is out of scope — this unit's `proposal.md`/`scratchpad.md`
+   necessarily name the layout they migrated from, and
+   `.minerva/work/2026-05-19-mcp-server/archive/scratchpad.md` keeps the bare `decisions/`
+   in its archived boilerplate (rewriting an archive would falsify the record; see
+   `replan.md`).
 5. Every authored body section and `**Date**` field is byte-identical to what it was
    before the move; only `**Type**`, `**Summary**` and `## Related` are added.
 6. `AGENTS.md` points at `.minerva/knowledge/` and the dated work-unit path.
