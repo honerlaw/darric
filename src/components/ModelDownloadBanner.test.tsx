@@ -21,4 +21,12 @@ describe("ModelDownloadBanner", () => {
 
     expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "0");
   });
+
+  it("clamps a percentage the backend reported out of range", () => {
+    // A server under-reporting Content-Length pushes the computed percentage
+    // past 100, which would otherwise reach aria-valuenow and the bar's width.
+    render(<ModelDownloadBanner progress={137} />);
+
+    expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "100");
+  });
 });

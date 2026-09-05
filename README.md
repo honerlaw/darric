@@ -34,8 +34,14 @@ npm run tauri:dev
 ```
 
 This starts the Vite dev server and the Tauri app together. On first launch, Darric will
-automatically download the Whisper model to `~/Library/Application Support/darric/`. This only
-happens once.
+automatically download the Whisper model (~1.6 GB) to `~/Library/Application Support/darric/`.
+This only happens once.
+
+The download starts on its own as soon as the app opens, and a progress bar under the header
+reports it. Recording is unavailable until it finishes — the Record button reads
+`Downloading <n>%` while it runs — because there is nothing to transcribe with yet. If the
+download fails, the reason appears in the error bar at the bottom of the window and the Record
+button becomes available again so you can retry.
 
 ## Other Commands
 

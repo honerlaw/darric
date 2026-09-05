@@ -9,6 +9,7 @@ import {
 import {
   deleteSession,
   listSessions,
+  modelDownloadState,
   onModelDownloadDone,
   onModelDownloadError,
   onModelDownloadProgress,
@@ -59,6 +60,20 @@ export function useSession(): UseSessionReturn {
     void refresh();
   }, [refresh]);
 
+  // A download started in Tauri's `setup()` emits before the webview holds any
+  // listener, so its `model_download_start` — and every tick until the next one
+  // — is lost. Seeding from a query is what makes the indicator correct for a
+  // frontend that mounted mid-download, which on a fresh install is every run.
+  useEffect(() => {
+    void modelDownloadState()
+      .then((pct) => {
+        setDownloadProgress((current) => current ?? pct);
+      })
+      .catch(() => {
+        // An unreadable seed just means the events remain the only source.
+      });
+  }, []);
+
   useEffect(() => {
     const unStart = onModelDownloadStart(() => {
       setDownloadProgress(0);
@@ -102,6 +117,9 @@ export function useSession(): UseSessionReturn {
     async (topic?: string): Promise<void> => {
       try {
         setIsStarting(true);
+        // A failed download's message would otherwise outlive the retry that
+        // fixed it and sit in the error bar for the rest of the session.
+        setError(null);
         const id = await startSession(topic);
         setActiveSessionId(id);
         setIsRecording(true);
@@ -138,6 +156,7 @@ export function useSession(): UseSessionReturn {
     async (id: string): Promise<void> => {
       try {
         setIsStarting(true);
+        setError(null);
         await resumeSession(id);
         setActiveSessionId(id);
         setIsRecording(true);

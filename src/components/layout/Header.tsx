@@ -32,9 +32,10 @@ export function Header({
   onRecord,
   onStop,
 }: HeaderProps): React.JSX.Element {
-  // Recording cannot start before the model exists, and starting one anyway
-  // kicks off a second download of the same file alongside the startup one.
-  const isDownloading = downloadProgress !== null;
+  // Gates starting a recording, never stopping one: this is one button serving
+  // both roles, and disabling it while `isRecording` would strand the user
+  // unable to stop an active recording until an unrelated download finished.
+  const cannotStart = !isRecording && (isStarting || downloadProgress !== null);
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 px-6" data-tauri-drag-region="true">
@@ -57,7 +58,7 @@ export function Header({
       <button
         type="button"
         onClick={isRecording ? onStop : onRecord}
-        disabled={isStarting || isDownloading}
+        disabled={cannotStart}
         className="flex h-[30px] cursor-pointer items-center gap-[6px] rounded-full border border-line bg-paper px-[14px] text-[13px] text-ink transition-colors hover:border-line-strong hover:bg-paper-sunken disabled:cursor-default disabled:opacity-40"
       >
         <span

@@ -43,4 +43,15 @@ describe("Header record button", () => {
     expect(screen.getByRole("button")).toHaveTextContent("Starting…");
     expect(screen.getByRole("button")).toBeDisabled();
   });
+
+  it("never disables Stop, even while a download is still streaming", () => {
+    // One button serves both roles. The startup download can still be running
+    // when a recording begins (the recording only needed the model loaded), and
+    // disabling the button then leaves the user unable to stop it.
+    render(<Header {...BASE_PROPS} isRecording downloadProgress={64} />);
+
+    const button = screen.getByRole("button");
+    expect(button).toHaveTextContent("Stop");
+    expect(button).toBeEnabled();
+  });
 });

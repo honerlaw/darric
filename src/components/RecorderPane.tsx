@@ -19,7 +19,11 @@ interface RecorderPaneProps {
   droppedSegments: number;
   isRecording: boolean;
   isStarting: boolean;
-  /** False while any recording is in flight — resuming a second one would be rejected. */
+  /**
+   * False while any recording is in flight (resuming a second one would be
+   * rejected) and while the speech model is still downloading (resuming would
+   * block on it, with no way to tell). Already includes `!isRecording`.
+   */
   canResume: boolean;
   elapsedSeconds: number;
   onResume: () => void;
@@ -160,7 +164,7 @@ export function RecorderPane({
         )}
       </div>
 
-      {!isRecording && canResume && (
+      {canResume && (
         <div className="flex shrink-0 items-center gap-3 border-t border-line px-10 py-4">
           <button
             type="button"

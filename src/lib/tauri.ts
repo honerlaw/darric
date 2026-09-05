@@ -27,6 +27,11 @@ export const setDeviceEnabled = async (id: string, enabled: boolean): Promise<vo
 };
 export const captureDropCount = async (): Promise<number> => invoke<number>("capture_drop_count");
 
+// Model
+/** Percentage downloaded, or null when no download is in flight. */
+export const modelDownloadState = async (): Promise<number | null> =>
+  invoke<number | null>("model_download_state");
+
 // Settings
 export const saveSetting = async (key: string, value: string): Promise<void> => {
   await invoke("save_setting", { key, value });

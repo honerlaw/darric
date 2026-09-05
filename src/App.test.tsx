@@ -4,16 +4,18 @@ import { emit } from "@tauri-apps/api/event";
 import App from "./App";
 import { mockCommands } from "./test/tauri-helpers";
 
-function mockEmptyInstall(): void {
+function mockEmptyInstall(downloadState: number | null = null): void {
   mockCommands({
     list_sessions: () => [],
     list_capture_devices: () => [],
     capture_drop_count: () => 0,
+    model_download_state: () => downloadState,
   });
 }
 
 function mockOneRecording(): void {
   mockCommands({
+    model_download_state: () => null,
     list_sessions: () => [
       {
         id: "a",
@@ -118,5 +120,31 @@ describe("App model download visibility", () => {
     fireEvent.click(recording);
 
     expect(await screen.findByRole("button", { name: /Resume recording/ })).toBeInTheDocument();
+  });
+
+  it("seeds the indicator from backend state when no event was ever received", async () => {
+    // The fresh-install path: `ensure_model` runs in Tauri's `setup()` and emits
+    // `model_download_start` before the webview holds a listener, so that event
+    // and every tick until the next one are lost. Nothing is emitted in this
+    // test at all — a purely event-driven UI would show nothing here.
+    mockEmptyInstall(37);
+    render(<App />);
+
+    expect(await screen.findByRole("progressbar")).toHaveAttribute("aria-valuenow", "37");
+    expect(screen.getByRole("button", { name: /Downloading 37%/ })).toBeDisabled();
+  });
+
+  it("lets a live event override the seeded value", async () => {
+    mockEmptyInstall(37);
+    render(<App />);
+    await screen.findByRole("progressbar");
+
+    await act(async () => {
+      await emit("model_download_progress", 58);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "58");
+    });
   });
 });

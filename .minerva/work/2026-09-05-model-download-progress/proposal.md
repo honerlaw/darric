@@ -83,6 +83,18 @@ Two alternatives were rejected:
 - `npm run lint`, `npm test`, `npm run build`, `cargo clippy` and `cargo test` all pass, with
   no lint suppressions added.
 
+Added by the 2026-09-05 replan (see `replan.md`):
+
+- The indicator is visible from the moment the window renders, not from the first progress
+  event — verified by a test in which no event is emitted at all and the state is seeded from
+  `model_download_state`.
+- Two overlapping `ensure_model` calls produce exactly one download and one intact file.
+- A failed download leaves no `.tmp` behind.
+- The Stop button is never disabled while a recording is active.
+
+Removed by the same replan: the deferral of the duplicate-download race to a tracker issue.
+It is fixed at its source here.
+
 ## Open Questions
 
 - None load-bearing. Exact copy ("Downloading speech model") is a judgment call made inline.
