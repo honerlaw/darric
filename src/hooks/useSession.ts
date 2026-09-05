@@ -36,7 +36,17 @@ interface UseSessionReturn {
   stop: () => Promise<void>;
   resume: (id: string) => Promise<void>;
   update: (id: string, topic?: string) => Promise<void>;
-  remove: (id: string) => Promise<void>;
+  /**
+   * Deletes the recording. Resolves true only when the delete completed *and*
+   * the session list was refreshed; false means the recording may still be
+   * there, so a caller must not act as though it is gone. Deliberately not just
+   * "did `delete_session` succeed" — a refresh that failed afterwards leaves
+   * `sessions` still holding the recording, and a UI that deselected it would
+   * be pointing away from a row the user can still see.
+   *
+   * Never rejects: the reason goes to `error`, which `App` renders.
+   */
+  remove: (id: string) => Promise<boolean>;
   refresh: () => Promise<void>;
 }
 
@@ -208,19 +218,36 @@ export function useSession(): UseSessionReturn {
 
   const update = useCallback(
     async (id: string, topic?: string): Promise<void> => {
-      await updateSession(id, topic);
-      await refresh();
+      try {
+        // Clearing first, as `start` and `resume` do: a previous failure's
+        // message must not outlive the attempt that succeeded.
+        setError(null);
+        await updateSession(id, topic);
+        await refresh();
+      } catch (e) {
+        setError(String(e));
+      }
     },
     [refresh],
   );
 
   const remove = useCallback(
-    async (id: string): Promise<void> => {
-      await deleteSession(id);
-      if (activeSessionId === id) setActiveSessionId(null);
-      await refresh();
+    async (id: string): Promise<boolean> => {
+      try {
+        setError(null);
+        await deleteSession(id);
+        // Functional, so only the id this call deleted is cleared — reading
+        // `activeSessionId` from the closure could be a render behind, and it
+        // is what kept this callback depending on the value.
+        setActiveSessionId((current) => (current === id ? null : current));
+        await refresh();
+        return true;
+      } catch (e) {
+        setError(String(e));
+        return false;
+      }
     },
-    [activeSessionId, refresh],
+    [refresh],
   );
 
   return {

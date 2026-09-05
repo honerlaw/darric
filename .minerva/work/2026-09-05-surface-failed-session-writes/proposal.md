@@ -16,11 +16,14 @@ hook that do not catch — a rejection from either reaches nothing that displays
 `error` state `App` renders in the bottom bar. `remove` and `update` do not:
 
 ```ts
-const remove = useCallback(async (id: string): Promise<void> => {
-  await deleteSession(id);                                   // no try/catch
-  if (activeSessionId === id) setActiveSessionId(null);
-  await refresh();
-}, [activeSessionId, refresh]);
+const remove = useCallback(
+  async (id: string): Promise<void> => {
+    await deleteSession(id); // no try/catch
+    if (activeSessionId === id) setActiveSessionId(null);
+    await refresh();
+  },
+  [activeSessionId, refresh],
+);
 ```
 
 `App.handleDelete` calls it with a bare `void`, so a rejection surfaces only as an unhandled promise
@@ -31,12 +34,12 @@ used to be a stray click on a bare `×`; it is now a trash-can icon plus a modal
 removes the recording and its transcript. It cannot be undone." A user who reads that sentence and
 presses Delete has been given an explicit promise.
 
-**There is a second half to the same defect.** `handleDelete` deselects *before* the delete
+**There is a second half to the same defect.** `handleDelete` deselects _before_ the delete
 resolves:
 
 ```ts
 const handleDelete = (id: string): void => {
-  if (id === viewingSessionId) setViewingSessionId(null);   // optimistic
+  if (id === viewingSessionId) setViewingSessionId(null); // optimistic
   void removeSession(id);
 };
 ```

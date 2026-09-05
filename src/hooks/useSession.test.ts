@@ -138,3 +138,128 @@ describe("useSession stop", () => {
     expect(result.current.elapsedSeconds).toBe(3);
   });
 });
+
+const ONE_SESSION = [
+  {
+    id: "a",
+    topic: "Standup",
+    started_at: "2024-01-01T09:00:00Z",
+    ended_at: "2024-01-01T09:30:00Z",
+    created_at: "2024-01-01T09:00:00Z",
+    recorded_minutes: 30,
+  },
+];
+
+describe("useSession remove", () => {
+  it("surfaces a failed delete instead of swallowing it", async () => {
+    // `remove` was the only command besides `update` with no catch, so a
+    // rejection reached nothing that displays it — and the confirmation modal
+    // has just promised the user the recording is gone.
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => ONE_SESSION,
+      delete_session: () => {
+        throw new Error("database is locked");
+      },
+    });
+    const { result } = renderHook(() => useSession());
+
+    let deleted: boolean | undefined;
+    await act(async () => {
+      deleted = await result.current.remove("a");
+    });
+
+    expect(deleted).toBe(false);
+    expect(result.current.error).toMatch(/database is locked/);
+  });
+
+  it("reports success so a caller can gate its optimistic update", async () => {
+    // The positive control: without it, a `remove` that always returned false
+    // would satisfy the assertion above.
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [],
+      delete_session: () => undefined,
+    });
+    const { result } = renderHook(() => useSession());
+
+    let deleted: boolean | undefined;
+    await act(async () => {
+      deleted = await result.current.remove("a");
+    });
+
+    expect(deleted).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it("clears the active recording only when it is the one deleted", async () => {
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [],
+      start_session: () => "live",
+      delete_session: () => undefined,
+    });
+    const { result } = renderHook(() => useSession());
+
+    await act(async () => {
+      await result.current.start();
+    });
+    expect(result.current.activeSessionId).toBe("live");
+
+    await act(async () => {
+      await result.current.remove("some-other-recording");
+    });
+    expect(result.current.activeSessionId).toBe("live");
+
+    await act(async () => {
+      await result.current.remove("live");
+    });
+    expect(result.current.activeSessionId).toBeNull();
+  });
+
+  it("does not leave a previous failure's message on a later success", async () => {
+    let fail = true;
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => ONE_SESSION,
+      delete_session: () => {
+        if (fail) throw new Error("database is locked");
+        return undefined;
+      },
+    });
+    const { result } = renderHook(() => useSession());
+
+    await act(async () => {
+      await result.current.remove("a");
+    });
+    expect(result.current.error).toMatch(/database is locked/);
+
+    fail = false;
+    await act(async () => {
+      await result.current.remove("a");
+    });
+    expect(result.current.error).toBeNull();
+  });
+});
+
+describe("useSession update", () => {
+  it("surfaces a failed rename instead of rejecting unhandled", async () => {
+    // Lower stakes than a delete — an unchanged title is its own feedback — but
+    // it is the other half of the same gap, and fixing one path while leaving
+    // the other open is a shape this project has already recorded.
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => ONE_SESSION,
+      update_session: () => {
+        throw new Error("no such session");
+      },
+    });
+    const { result } = renderHook(() => useSession());
+
+    await act(async () => {
+      await result.current.update("a", "Retro");
+    });
+
+    expect(result.current.error).toMatch(/no such session/);
+  });
+});
