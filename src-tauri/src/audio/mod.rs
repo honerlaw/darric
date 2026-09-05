@@ -37,7 +37,7 @@ pub struct CaptureEngine {
     threads: Vec<JoinHandle<()>>,
     statuses: Vec<SharedStatus>,
     segmenters: Vec<(CaptureDevice, Arc<Mutex<Segmenter>>)>,
-    pool: Option<TranscriptionPool>,
+    pool: Option<Arc<TranscriptionPool>>,
 }
 
 impl CaptureEngine {
@@ -64,17 +64,17 @@ impl CaptureEngine {
                 Arc::new(move |line: TranscribedLine| {
                     persist_and_emit(&sink_db, &sink_app, &sink_session, &line);
                 });
-            TranscriptionPool::new(
+            Arc::new(TranscriptionPool::new(
                 &t,
                 worker_count,
                 QUEUE_CAPACITY_PER_SOURCE * devices.len().max(1),
                 &sink,
-            )
+            ))
         });
         if pool.is_none() {
             log::warn!("[audio] no transcriber — capturing without transcription");
         }
-        let pool = Arc::new(pool);
+        let pool: Option<Arc<TranscriptionPool>> = pool;
 
         let mut threads = Vec::new();
         let mut statuses = Vec::new();
@@ -86,7 +86,7 @@ impl CaptureEngine {
             statuses.push(Arc::clone(&status));
             segmenters.push((dev.clone(), Arc::clone(&seg)));
 
-            let pool_for_source = Arc::clone(&pool);
+            let pool_for_source = pool.clone();
             let dev_for_cb = dev.clone();
             let shutdown_for_source = Arc::clone(&shutdown);
 
@@ -95,7 +95,7 @@ impl CaptureEngine {
                 .spawn(move || {
                     source::run_source(&dev_for_cb.clone(), &status, &shutdown_for_source, {
                         let seg = Arc::clone(&seg);
-                        let pool = Arc::clone(&pool_for_source);
+                        let pool = pool_for_source.clone();
                         move |samples| {
                             // Short, effectively uncontended critical section: the
                             // only other holder is the flush at stop.
@@ -113,11 +113,25 @@ impl CaptureEngine {
                         }
                     });
                 })
-                .map_err(|e| crate::error::AppError::Audio(e.to_string()))?;
-            threads.push(handle);
-        }
+                .map_err(|e| crate::error::AppError::Audio(e.to_string()));
 
-        let pool = Arc::try_unwrap(pool).ok().flatten();
+            match handle {
+                Ok(h) => threads.push(h),
+                Err(e) => {
+                    // Stop and join whatever already started, or those threads
+                    // run forever with no handle able to reach them.
+                    log::error!("[audio] failed to spawn a capture thread: {e}");
+                    shutdown.store(true, Ordering::SeqCst);
+                    for t in threads {
+                        t.join().ok();
+                    }
+                    if let Some(p) = pool.as_ref() {
+                        p.shutdown();
+                    }
+                    return Err(e);
+                }
+            }
+        }
 
         Ok(Self {
             session_id,
@@ -147,7 +161,7 @@ impl CaptureEngine {
 
     /// Segments discarded because transcription fell behind.
     pub fn dropped_segments(&self) -> u64 {
-        self.pool.as_ref().map_or(0, TranscriptionPool::dropped)
+        self.pool.as_ref().map_or(0, |p| p.dropped())
     }
 
     /// Stop every source, flush trailing partial segments, and drain the pool.
@@ -158,6 +172,8 @@ impl CaptureEngine {
         }
 
         // Flush after the sources are stopped so nothing races the final push.
+        // Every capture thread has been joined by now, so their pool clones are
+        // dropped and this is the last reference outside the workers themselves.
         if let Some(pool) = self.pool.as_ref() {
             for (dev, seg) in &self.segmenters {
                 let tail = seg
@@ -175,9 +191,9 @@ impl CaptureEngine {
             }
         }
 
-        if let Some(pool) = self.pool {
-            let dropped = pool.dropped();
+        if let Some(pool) = self.pool.as_ref() {
             pool.shutdown();
+            let dropped = pool.dropped();
             if dropped > 0 {
                 log::warn!("[audio] {dropped} segment(s) were dropped this session");
             }

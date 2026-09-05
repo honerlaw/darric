@@ -125,7 +125,10 @@ impl Shared {
 /// model weights are loaded once no matter how many workers there are.
 pub struct TranscriptionPool {
     shared: Arc<Shared>,
-    workers: Vec<JoinHandle<()>>,
+    /// Held behind a `Mutex` so `shutdown` can join them through a shared
+    /// reference. The engine hands `Arc<TranscriptionPool>` clones to every
+    /// capture thread, so it never has sole ownership to consume.
+    workers: Mutex<Vec<JoinHandle<()>>>,
 }
 
 impl TranscriptionPool {
@@ -160,7 +163,7 @@ impl TranscriptionPool {
 
         Self {
             shared,
-            workers: handles,
+            workers: Mutex::new(handles),
         }
     }
 
@@ -185,7 +188,12 @@ impl TranscriptionPool {
     }
 
     /// Stop accepting work and join every worker, letting the queue drain first.
-    pub fn shutdown(self) {
+    ///
+    /// Takes `&self` and is idempotent: draining the handle vector means a
+    /// second call joins nothing. Workers keep popping until the queue is empty
+    /// even after the shutdown flag is set, so queued segments are transcribed
+    /// rather than abandoned.
+    pub fn shutdown(&self) {
         {
             let mut q = self
                 .shared
@@ -195,7 +203,13 @@ impl TranscriptionPool {
             q.shutdown = true;
         }
         self.shared.ready.notify_all();
-        for h in self.workers {
+        let handles: Vec<JoinHandle<()>> = self
+            .workers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .drain(..)
+            .collect();
+        for h in handles {
             h.join().ok();
         }
     }
@@ -300,6 +314,20 @@ mod tests {
         let s = shared(1);
         s.submit(job("a"));
         assert_eq!(s.queue.lock().unwrap().items.len(), 1);
+    }
+
+    #[test]
+    fn queued_work_still_drains_after_shutdown_is_flagged() {
+        // The stop path sets the flag and then relies on workers finishing what
+        // is already queued. If `take` returned None as soon as the flag was
+        // set, every recording would lose whatever had not been transcribed yet.
+        let s = shared(4);
+        s.submit(job("a"));
+        s.submit(job("b"));
+        s.queue.lock().unwrap().shutdown = true;
+        assert_eq!(s.take().map(|j| j.device_name), Some("a".to_string()));
+        assert_eq!(s.take().map(|j| j.device_name), Some("b".to_string()));
+        assert!(s.take().is_none());
     }
 
     #[test]

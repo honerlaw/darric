@@ -269,8 +269,14 @@ pub async fn stop_session(state: tauri::State<'_, AppState>) -> Result<()> {
     };
 
     let session_id = engine.session_id().to_string();
-    // Stops every source, flushes trailing partial segments, drains the pool.
-    engine.stop();
+
+    // `stop` joins the capture threads and then waits for the whisper workers to
+    // drain the queue — up to several seconds with a few devices, since
+    // inference serialises on the GPU. Doing that inline would block a Tokio
+    // worker thread and stall every other command scheduled onto it.
+    tokio::task::spawn_blocking(move || engine.stop())
+        .await
+        .map_err(|e| AppError::Audio(format!("stopping the capture engine failed: {e}")))?;
 
     let now = Utc::now().to_rfc3339();
     let db = state

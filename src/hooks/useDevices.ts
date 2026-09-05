@@ -48,6 +48,10 @@ export function useDevices(isRecording: boolean): UseDevicesReturn {
       setDevices((prev) => prev.map((d) => (d.id === id ? { ...d, enabled } : d)));
       try {
         await setDeviceEnabled(id, enabled);
+      } catch (e) {
+        // Swallowing this would leave the switch showing a state the backend
+        // never accepted. The refresh below re-reads the truth either way.
+        console.error("toggling capture device failed:", e);
       } finally {
         await refresh();
       }

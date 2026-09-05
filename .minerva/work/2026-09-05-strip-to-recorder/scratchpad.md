@@ -191,3 +191,72 @@ verification runs silently produced nothing at all rather than failing loudly.
 - **A freshly cut phase branch with zero commits reads as "merged"**, because it is identical to
   the default branch. Combined with the above, phase resolution is only trustworthy once the phase
   has at least one commit. Worth folding into the same entry.
+
+## Review finding 2026-09-05 (phase 2)
+
+Reviewed on two lenses again. The minerva audit caught one spec-fidelity miss: the proposal said
+phase 2 drops `speaker_tracker.rs` **and** `rustfft`, and only the file had gone — an unused Rust
+dependency compiles fine, so nothing but reading the spec back against the diff would have found
+it. Removed; Rust dependencies are now 13, down from 18 before the strip.
+
+The audit also re-checked whether phase 2's second rewrite of `RecorderPane`/`App` repeated the
+mistake `2026-09-05-pattern-ui-rewrites-drop-state-guards-not-markup` documents. It did not: the
+`[sessionId]` reset, the `canResume` gate and the error banner all survived. The entry earned its
+keep on the very next change to those files.
+
+The code review found four defects, all triaged FIX and all fixed.
+
+### 1. HIGH — `Arc::try_unwrap` silently disabled the entire transcription pool
+
+`CaptureEngine::start` wrapped the pool in an `Arc`, handed a clone to each device's capture
+thread, and then called `Arc::try_unwrap(pool)` to reclaim ownership for the struct field. With N
+devices the strong count is `1 + N`, and `begin_capture` refuses to start with zero devices — so
+`try_unwrap` failed **on every real recording**, `.ok().flatten()` turned that into `None`, and the
+engine stored no pool at all while the real one stayed alive inside the thread closures.
+
+Three consequences, all silent and all deterministic:
+
+- `stop()`'s flush block is guarded by `if let Some(pool)`, so **every device's trailing partial
+  segment was discarded on every stop** — up to 8 seconds of real speech per device per recording.
+  The frontend's `FLUSH_LINGER_MS` exists precisely to wait for that chunk, so the two halves of
+  the design disagreed with each other and nothing failed loudly.
+- `dropped_segments()` always returned 0, so the drop warning could never appear — the honesty
+  mechanism built specifically to avoid a silently incomplete transcript was itself silently
+  disabled.
+- `pool.shutdown()` was never called, so the whisper workers stayed parked in `Condvar::wait`
+  forever and their `JoinHandle`s were dropped without joining: **two leaked threads per
+  recording session**.
+
+Fixed by changing `TranscriptionPool::shutdown` to take `&self` (joining through a
+`Mutex<Vec<JoinHandle>>`, drained so it is idempotent) and having the engine hold
+`Option<Arc<TranscriptionPool>>` rather than trying to reclaim sole ownership. The type now makes
+the bug unexpressible instead of relying on a runtime unwrap that always fails.
+
+Worth noting that the completion Verifier explicitly checked the _ordering_ inside `stop()` and
+pronounced it correct — which it was. The ordering was right and the guard above it was never
+true. Verifying a sequence of steps says nothing about whether the block containing them runs.
+
+### 2. MEDIUM — `stop_session` blocked a Tokio worker
+
+An `async fn` command called the synchronous, thread-joining `engine.stop()` directly. Masked
+while bug 1 was live (there was nothing to join); the moment 1 was fixed it would block a runtime
+worker for as long as the queue took to drain — seconds, with several devices, since inference
+serialises on the GPU. Now wrapped in `spawn_blocking`.
+
+### 3. LOW — a spawn failure mid-loop leaked already-started capture threads
+
+If `thread::Builder::spawn` failed for device N, the function returned `Err` before constructing
+the engine, so the N−1 threads already running had no handle able to stop them. Now sets the
+shutdown flag, joins what started, and shuts the pool down before returning.
+
+### 4. LOW — an optimistic device toggle could desynchronise
+
+`useDevices.toggle` awaited the IPC call without catching, and its only caller discards the
+promise with `void`, so a failed toggle became an unhandled rejection and could leave the switch
+showing a state the backend rejected. Now caught and logged; the `finally` refresh re-reads truth.
+
+### Findings pending promote (phase 2 review)
+
+- The `Arc::try_unwrap`-after-sharing pattern is worth an entry: it fails silently, it is
+  guaranteed rather than racy once anything else holds a clone, and `.ok()` converts the failure
+  into a plausible-looking `None`.
