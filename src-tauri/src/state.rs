@@ -1,6 +1,6 @@
 use crate::audio::device::ExclusionRegistry;
 use crate::audio::CaptureEngine;
-use crate::transcription::Transcriber;
+use crate::transcription::loader::TranscriberSlot;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
@@ -10,7 +10,7 @@ pub struct AppState {
     pub db: Arc<DbConn>,
     /// The running capture session, if any.
     pub engine: Mutex<Option<CaptureEngine>>,
-    pub transcriber: Arc<Mutex<Option<Arc<Transcriber>>>>,
+    pub transcriber: TranscriberSlot,
     /// Aggregate devices this process created for output taps, which must never
     /// be enumerated back as inputs.
     pub exclusions: ExclusionRegistry,
@@ -26,7 +26,7 @@ impl AppState {
         Self {
             db: Arc::new(DbConn(Mutex::new(conn))),
             engine: Mutex::new(None),
-            transcriber: Arc::new(Mutex::new(None)),
+            transcriber: Arc::new(tokio::sync::Mutex::new(None)),
             exclusions: ExclusionRegistry::new(),
             disabled_devices: Mutex::new(disabled_devices),
         }

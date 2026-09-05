@@ -9,7 +9,7 @@ mod transcription;
 use commands::{devices, model as model_commands, sessions, settings};
 use state::AppState;
 use std::sync::Arc;
-use tauri::{Emitter, Manager};
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -23,29 +23,17 @@ pub fn run() {
             let disabled = devices::load_disabled(&conn);
             let state = AppState::new(conn, disabled);
 
-            // Pre-load whisper in background so the first session starts instantly
+            // Pre-load whisper in the background so the first session starts
+            // instantly. This goes through the same single-flight loader as the
+            // session path, so a recording started while this is still
+            // downloading waits for it rather than racing it.
             let transcriber_slot = state.transcriber.clone();
+            let db = Arc::clone(&state.db);
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                match model::ensure_model(&handle).await {
-                    Ok(path) => {
-                        log::info!("[startup] loading whisper model into memory…");
-                        let path_str = path.to_string_lossy().into_owned();
-                        match tauri::async_runtime::spawn_blocking(move || {
-                            transcription::Transcriber::new(&path_str)
-                        })
-                        .await
-                        {
-                            Ok(Ok(t)) => {
-                                *transcriber_slot.lock().unwrap() = Some(Arc::new(t));
-                                log::info!("[startup] whisper ready");
-                                handle.emit("model_ready", ()).ok();
-                            }
-                            Ok(Err(e)) => log::error!("[startup] whisper load failed: {e}"),
-                            Err(e) => log::error!("[startup] spawn_blocking failed: {e}"),
-                        }
-                    }
-                    Err(e) => log::error!("[startup] model download failed: {e}"),
+                match transcription::loader::get_or_load(&handle, &transcriber_slot, &db).await {
+                    Ok(_) => log::info!("[startup] whisper ready"),
+                    Err(e) => log::error!("[startup] whisper unavailable: {e}"),
                 }
             });
 

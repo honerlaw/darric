@@ -1,3 +1,4 @@
+pub mod loader;
 pub mod pool;
 
 use crate::error::{AppError, Result};

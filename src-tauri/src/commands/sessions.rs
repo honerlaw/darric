@@ -2,11 +2,10 @@ use crate::{
     audio::{device, CaptureEngine},
     error::{AppError, Result},
     state::AppState,
-    transcription::Transcriber,
+    transcription::loader,
 };
 use chrono::Utc;
-use std::sync::Arc;
-use tauri::{AppHandle, Emitter};
+use tauri::AppHandle;
 use uuid::Uuid;
 
 /// Whisper worker threads draining the shared segment queue.
@@ -28,71 +27,6 @@ use uuid::Uuid;
 /// `large-v3-turbo` is a larger model; the serialisation conclusion is a
 /// property of the GPU queue and should hold, but the absolute timings will not.
 const WHISPER_WORKERS: usize = 2;
-
-async fn load_transcriber(
-    app: &AppHandle,
-    state: &tauri::State<'_, AppState>,
-) -> Option<Arc<Transcriber>> {
-    let cached = state
-        .transcriber
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-        .clone();
-    if cached.is_some() {
-        log::info!("[session] using pre-loaded transcriber");
-        return cached;
-    }
-    log::info!("[session] transcriber not ready yet — loading now");
-
-    let custom = {
-        let db = state
-            .db
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        db.query_row(
-            "SELECT value FROM settings WHERE key = 'whisper_model_path'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .ok()
-        .filter(|s| !s.is_empty())
-    };
-
-    let path = match custom {
-        Some(p) => Ok(std::path::PathBuf::from(p)),
-        None => crate::model::ensure_model(app).await,
-    };
-
-    match path {
-        Ok(p) => {
-            let path_str = p.to_string_lossy().into_owned();
-            match tokio::task::spawn_blocking(move || Transcriber::new(&path_str)).await {
-                Ok(Ok(t)) => {
-                    let t = Arc::new(t);
-                    *state
-                        .transcriber
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(t.clone());
-                    app.emit("model_ready", ()).ok();
-                    Some(t)
-                }
-                Ok(Err(e)) => {
-                    log::error!("[session] transcriber load failed: {e}");
-                    None
-                }
-                Err(e) => {
-                    log::error!("[session] spawn_blocking failed: {e}");
-                    None
-                }
-            }
-        }
-        Err(e) => {
-            log::error!("[session] model unavailable: {e}");
-            None
-        }
-    }
-}
 
 #[derive(Debug, serde::Serialize)]
 pub struct Session {
@@ -152,7 +86,10 @@ async fn begin_capture(
     state: &tauri::State<'_, AppState>,
     session_id: String,
 ) -> Result<()> {
-    let transcriber = load_transcriber(&app, state).await;
+    // A session with no transcriber records nothing usable — darric persists
+    // transcript lines, not audio — so this is a hard failure rather than a
+    // capture that silently transcribes nothing.
+    let transcriber = loader::get_or_load(&app, &state.transcriber, &state.db).await?;
     let devices = devices_to_capture(state);
 
     if devices.is_empty() {
@@ -173,7 +110,7 @@ async fn begin_capture(
     let engine = CaptureEngine::start(
         session_id,
         devices,
-        transcriber,
+        Some(transcriber),
         WHISPER_WORKERS,
         &app,
         &state.db,
@@ -219,7 +156,24 @@ pub async fn start_session(
         )?;
     }
 
-    begin_capture(app, &state, session_id.clone()).await?;
+    if let Err(e) = begin_capture(app, &state, session_id.clone()).await {
+        // The rows above were written before capture was attempted. A start that
+        // never captured anything must not leave an empty session behind.
+        let db = state
+            .db
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for sql in [
+            "DELETE FROM recording_segments WHERE session_id = ?1",
+            "DELETE FROM sessions WHERE id = ?1",
+        ] {
+            if let Err(cleanup) = db.execute(sql, rusqlite::params![session_id]) {
+                log::error!("[session] could not roll back a failed start: {cleanup}");
+            }
+        }
+        return Err(e);
+    }
     Ok(session_id)
 }
 
@@ -238,6 +192,10 @@ pub async fn resume_session(
         return Err(AppError::SessionActive);
     }
 
+    // Capture starts before the session is re-opened, so a failure to start
+    // leaves the stored session exactly as it was and needs no rollback.
+    begin_capture(app, &state, id.clone()).await?;
+
     {
         let now = Utc::now().to_rfc3339();
         let db = state
@@ -255,7 +213,6 @@ pub async fn resume_session(
         )?;
     }
 
-    begin_capture(app, &state, id.clone()).await?;
     Ok(id)
 }
 

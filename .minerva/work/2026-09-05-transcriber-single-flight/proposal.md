@@ -21,13 +21,13 @@ Diagnosed from runtime state on the reporter's machine:
 - That session has **zero** rows in `transcript_lines`.
 
 The mechanism: `lib.rs`'s startup task calls `model::ensure_model` to download the model, and
-`commands/sessions.rs::load_transcriber` calls `model::ensure_model` *again* when it finds no
+`commands/sessions.rs::load_transcriber` calls `model::ensure_model` _again_ when it finds no
 cached transcriber. Neither knows about the other. Both stream into the same
 `ggml-large-v3-turbo.tmp` (`tokio::fs::File::create` truncates it out from under the first writer),
 and both then `tokio::fs::rename(tmp, bin)`. Exactly one rename can succeed; the loser gets
 `ENOENT`.
 
-Because the startup download begins earlier, it is reliably the winner, so the *session's* call is
+Because the startup download begins earlier, it is reliably the winner, so the _session's_ call is
 reliably the loser. `ensure_model` returns `Err`, and `load_transcriber` converts that into a plain
 `None`:
 
@@ -50,7 +50,7 @@ prefer a shape where the mistake is unexpressible — is what this unit applies.
 **Make model acquisition and transcriber construction single-flight, shared by every caller.**
 
 `AppState.transcriber` becomes `Arc<tokio::sync::Mutex<Option<Arc<Transcriber>>>>`. A single helper
-holds that lock across the *whole* acquire-and-load sequence (resolve path → `ensure_model` →
+holds that lock across the _whole_ acquire-and-load sequence (resolve path → `ensure_model` →
 `Transcriber::new` → store), so a second caller arriving mid-download blocks on the lock and then
 finds the already-loaded transcriber rather than starting a competing download. One download, one
 `Transcriber::new`, one 1.6 GB resident copy.
@@ -71,7 +71,7 @@ frontend, which already renders `error` in `App.tsx`. A session that cannot tran
 — darric persists no audio, only transcript lines — so refusing beats recording nothing silently.
 
 `CaptureEngine::start` keeps its `Option<Arc<Transcriber>>` parameter: that is the honest type for
-the engine, and its tests construct it without a transcriber. The change is that the *session* path
+the engine, and its tests construct it without a transcriber. The change is that the _session_ path
 can no longer pass `None` by accident.
 
 **Roll back the session rows when capture fails to start.** `start_session` inserts the `sessions`
