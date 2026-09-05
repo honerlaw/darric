@@ -1,6 +1,6 @@
 # Single-flight the whisper model load so a session started mid-download still transcribes
 
-**Status**: Draft
+**Status**: Shipped (2026-09-05)
 **Date**: 2026-09-05
 
 ## Goal
@@ -47,37 +47,52 @@ prefer a shape where the mistake is unexpressible — is what this unit applies.
 
 ## Approach
 
-**Make model acquisition and transcriber construction single-flight, shared by every caller.**
+_Rewritten at promote to match what shipped._
 
-`AppState.transcriber` becomes `Arc<tokio::sync::Mutex<Option<Arc<Transcriber>>>>`. A single helper
-holds that lock across the _whole_ acquire-and-load sequence (resolve path → `ensure_model` →
-`Transcriber::new` → store), so a second caller arriving mid-download blocks on the lock and then
-finds the already-loaded transcriber rather than starting a competing download. One download, one
-`Transcriber::new`, one 1.6 GB resident copy.
+**Model acquisition and transcriber construction are single-flight, shared by every caller.**
+`AppState.transcriber` is a `TranscriberSlot` (`Arc<tokio::sync::Mutex<Option<Arc<Transcriber>>>>`).
+A generic `get_or_init` in the new `transcription/loader.rs` holds that lock across the _whole_
+acquire-and-load sequence — `ensure_model`, then `Transcriber::new` — so a second caller arriving
+mid-download blocks and then observes the finished transcriber. `ensure_model` now has exactly one
+call site in the crate, inside that lock.
 
-An async mutex is used rather than `OnceCell` deliberately: a `OnceCell` that resolved to an error
-would cache the failure, so a transient network failure would poison transcription for the rest of
-the process lifetime. Holding a mutex and re-checking leaves the next caller free to retry.
+An async mutex rather than a `OnceCell`, deliberately: a `OnceCell` resolved to an error caches the
+failure, so one transient network failure at launch would disable transcription for the process
+lifetime. `get_or_init` returns an `Origin` (`Cached` / `Loaded`) so the caller can log which case
+it hit — the single most useful line for diagnosing this area.
 
-Both callers go through that one helper:
+`load_transcriber` was **deleted**, not converted: both callers (`lib.rs`'s startup pre-load and
+`sessions.rs::begin_capture`) now go through `loader::get_or_load`.
 
-- `lib.rs`'s startup pre-load, so the model is ready before the first session where possible.
-- `sessions.rs::load_transcriber`, so a session started mid-download waits for the in-flight load
-  instead of racing it.
+**A missing transcriber is a hard failure.** `get_or_load` returns `Result`, `begin_capture`
+propagates it, and `start_session` / `resume_session` return `Err` to the frontend, which already
+renders `error` in `App.tsx`.
 
-**Fail loudly.** `load_transcriber` returns `Result<Arc<Transcriber>>` rather than `Option`, and
-`begin_capture` propagates the error. `start_session` / `resume_session` then return `Err` to the
-frontend, which already renders `error` in `App.tsx`. A session that cannot transcribe is worthless
-— darric persists no audio, only transcript lines — so refusing beats recording nothing silently.
+**`CaptureEngine` requires a transcriber.** `start` takes `&Arc<Transcriber>` and the `pool` field
+is `Arc<TranscriptionPool>`. The original proposal kept the `Option` and justified it by claiming
+"its tests construct it without a transcriber" — that claim was false; no test anywhere constructs
+a `CaptureEngine`, and `None` had become unconstructible. Removing it deleted five unreachable
+branches including both `if let Some(pool)` guards in `stop()`. Recorded as
+`2026-09-05-decision-capture-engine-requires-a-transcriber`.
 
-`CaptureEngine::start` keeps its `Option<Arc<Transcriber>>` parameter: that is the honest type for
-the engine, and its tests construct it without a transcriber. The change is that the _session_ path
-can no longer pass `None` by accident.
+**`start_session` / `resume_session` are serialised.** Making the load blocking stretched the
+existing check-then-act on `engine.is_some()` to the length of a model download, and an overwritten
+`CaptureEngine` never stops (it has no `Drop`). An `AppState.session_transition` mutex is held
+across each command. Recorded as `2026-09-05-bug-the-session-start-guard-is-check-then-act`.
 
-**Roll back the session rows when capture fails to start.** `start_session` inserts the `sessions`
-and `recording_segments` rows before `begin_capture`. Making `begin_capture` fail more often would
-otherwise litter the sessions list with empty sessions, so a failed start now deletes the rows it
-just inserted.
+**Both failure paths roll back completely.** `erase_session` removes `transcript_lines`,
+`recording_segments` and the session in one transaction — `transcript_lines` included because its
+foreign key to `sessions` has no cascade under `PRAGMA foreign_keys=ON`, so omitting it made the
+rollback itself fail. `resume_session` reopens the session _before_ capturing and calls
+`restore_ended_session` on failure; the reverse order left a live engine installed behind a
+returned `Err`.
+
+**A stale `whisper_model_path` setting falls back** to the downloaded model rather than failing
+forever, since both paths now consult that setting and nothing in the UI can clear it.
+
+`model.rs` was deliberately left untouched to stay clear of the concurrent
+`2026-09-05-model-download-progress` unit, which added its own `DOWNLOAD_LOCK` inside
+`ensure_model`. The two locks nest outer-to-inner with no cycle.
 
 ### Rejected alternatives
 
@@ -85,8 +100,9 @@ just inserted.
   timeout, and has no recovery path if the startup load already failed — a user who was offline at
   launch could never start a session without restarting the app.
 - **Fix `ensure_model` internally only (unique temp filename, or a file lock).** Removes the
-  `ENOENT`, but still downloads 1.6 GB twice and still builds two `WhisperContext`s. It treats the
-  collision as a file-naming problem rather than the missing mutual exclusion it actually is.
+  `ENOENT`, but still downloads 1.6 GB twice and still builds two `WhisperContext`s, and still
+  leaves the `Err`-to-`None` swallow in place. It treats the collision as a file-naming problem
+  rather than the missing mutual exclusion it actually is.
 
 ## Success criteria
 
@@ -105,4 +121,10 @@ just inserted.
 
 - None outstanding. The blocking-start UX — `start_session` awaits the whole download, so the Record
   button appears stuck for minutes — is real but belongs to the concurrent
-  `2026-09-05-model-download-progress` unit, which is surfacing download progress in the UI.
+  `2026-09-05-model-download-progress` unit, which shipped download progress in the UI as PR #14.
+
+## Deferred work
+
+- #16 — validate the cached whisper model instead of trusting `exists()`; both download locks are process-local so two app instances still race (priority: medium)
+- #17 — `CaptureEngine::start`'s error path leaks tap UIDs in the `ExclusionRegistry`, permanently hiding those devices (priority: medium)
+- #18 — `await_holding_lock = "allow"` in `Cargo.toml` contradicts the CLAUDE.md linting policy (priority: high)
