@@ -9,7 +9,7 @@ const BASE_PROPS = {
   isStopping: false,
   downloadProgress: null,
   elapsedSeconds: 0,
-  canResume: false,
+  resumeTarget: null,
   onRecord: (): void => undefined,
   onStop: (): void => undefined,
   onResume: (): void => undefined,
@@ -105,9 +105,11 @@ describe("Header record button", () => {
 
 describe("Header resume button", () => {
   it("offers Resume beside Record when a stopped recording is selected", () => {
-    render(<Header {...BASE_PROPS} canResume />);
+    render(<Header {...BASE_PROPS} resumeTarget="Standup" />);
 
-    const resume = screen.getByRole("button", { name: /Resume recording/ });
+    // The button names what it acts on: in the pane it sat under the recording
+    // it would continue, and in global chrome nothing else says which one.
+    const resume = screen.getByRole("button", { name: "Resume recording “Standup”" });
     const record = screen.getByRole("button", { name: /Record/ });
     expect(resume).toBeInTheDocument();
     // Immediately beside Record, not merely somewhere else in the chrome — the
@@ -128,7 +130,9 @@ describe("Header resume button", () => {
     const user = userEvent.setup();
     const onResume = vi.fn();
     const onRecord = vi.fn();
-    render(<Header {...BASE_PROPS} canResume onResume={onResume} onRecord={onRecord} />);
+    render(
+      <Header {...BASE_PROPS} resumeTarget="Standup" onResume={onResume} onRecord={onRecord} />,
+    );
 
     await user.click(screen.getByRole("button", { name: /Resume recording/ }));
 

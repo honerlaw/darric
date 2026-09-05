@@ -1,12 +1,8 @@
 import type React from "react";
 import { useState } from "react";
-import { groupSessionsByDate } from "../lib/utils";
+import { groupSessionsByDate, sessionLabel } from "../lib/utils";
 import type { Session } from "../types";
 import { ConfirmDialog } from "./ConfirmDialog";
-
-function sessionLabel(session: Session): string {
-  return session.topic !== null && session.topic.length > 0 ? session.topic : "Untitled recording";
-}
 
 /** The row's delete affordance. A can, not an `×` — the action destroys the recording. */
 function TrashIcon(): React.JSX.Element {
@@ -92,8 +88,8 @@ export function RecordingList({
                 onClick={() => {
                   setPendingDeleteId(s.id);
                 }}
-                aria-label={`Delete ${s.topic ?? "recording"}`}
-                className="cursor-pointer text-ink-4 opacity-0 transition-opacity group-hover:opacity-100 hover:text-danger"
+                aria-label={`Delete ${sessionLabel(s)}`}
+                className="cursor-pointer text-ink-4 opacity-0 transition-opacity group-hover:opacity-100 hover:text-danger focus-visible:opacity-100"
               >
                 <TrashIcon />
               </button>

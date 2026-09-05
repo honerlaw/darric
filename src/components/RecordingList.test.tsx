@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RecordingList } from "./RecordingList";
 import type { Session } from "../types";
@@ -13,6 +13,13 @@ function makeSession(id: string, topic: string | null): Session {
     created_at: "2024-01-01T09:00:00Z",
     recorded_minutes: 30,
   };
+}
+
+/** The dismiss-on-press layer the dialog panel sits inside. */
+function backdropOf(dialog: HTMLElement): HTMLElement {
+  const backdrop = dialog.parentElement;
+  if (backdrop === null) throw new Error("the dialog panel has no backdrop");
+  return backdrop;
 }
 
 const BASE_PROPS = {
@@ -37,6 +44,11 @@ describe("RecordingList delete confirmation", () => {
     expect(remove.querySelector("svg")).not.toBeNull();
     expect(remove).toHaveTextContent("");
     expect(container).not.toHaveTextContent("×");
+    // The control is hover-revealed, so without this a keyboard user tabs onto
+    // an invisible button. jsdom evaluates no stylesheet, so asserting the class
+    // is the strongest check available here — and this repo has already shipped
+    // a rewrite that carried the markup across and dropped a guard like it.
+    expect(remove).toHaveClass("focus-visible:opacity-100");
   });
 
   it("deletes nothing on the first click and names the recording it is about to destroy", async () => {
@@ -54,7 +66,10 @@ describe("RecordingList delete confirmation", () => {
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("aria-modal", "true");
-    expect(dialog).toHaveTextContent("Standup");
+    expect(dialog).toHaveAccessibleName(/Standup/);
+    // The consequence is the reason the dialog exists, so it has to be part of
+    // what a screen reader announces — not just text that happens to be inside.
+    expect(dialog).toHaveAccessibleDescription(/cannot be undone/);
     expect(onDelete).not.toHaveBeenCalled();
   });
 
@@ -127,15 +142,13 @@ describe("RecordingList delete confirmation", () => {
       />,
     );
 
-    screen.getByRole("button", { name: "Delete Standup" }).click();
+    fireEvent.click(screen.getByRole("button", { name: "Delete Standup" }));
     rerender(<RecordingList {...BASE_PROPS} sessions={[]} onDelete={(): void => undefined} />);
 
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("keeps a click inside the dialog from cancelling it", async () => {
-    // The panel sits inside the click-to-dismiss backdrop, so without a stopped
-    // propagation, selecting the dialog's own text closes it.
     const user = userEvent.setup();
     render(
       <RecordingList
@@ -151,17 +164,107 @@ describe("RecordingList delete confirmation", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  it("falls back to a generic name for an untitled recording", async () => {
+  it("survives a text selection that is released over the backdrop", async () => {
+    // A click's target is the common ancestor of its press and its release, so
+    // pressing on the dialog's body text and releasing over the dim area reports
+    // the *backdrop* — a click-based dismissal closes the dialog mid-selection,
+    // and containment inside the panel cannot see it. Dismissal is keyed to the
+    // press instead.
     const user = userEvent.setup();
     render(
       <RecordingList
         {...BASE_PROPS}
-        sessions={[makeSession("a", null)]}
+        sessions={[makeSession("a", "Standup")]}
         onDelete={(): void => undefined}
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Delete recording" }));
+    await user.click(screen.getByRole("button", { name: "Delete Standup" }));
+    const backdrop = backdropOf(screen.getByRole("dialog"));
+
+    fireEvent.mouseDown(screen.getByText(/cannot be undone/));
+    fireEvent.mouseUp(backdrop);
+    fireEvent.click(backdrop);
+
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("still dismisses on a press that starts on the backdrop", () => {
+    // The positive control: without it the test above passes for a dialog that
+    // cannot be dismissed by clicking away at all.
+    render(
+      <RecordingList
+        {...BASE_PROPS}
+        sessions={[makeSession("a", "Standup")]}
+        onDelete={(): void => undefined}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete Standup" }));
+    fireEvent.mouseDown(backdropOf(screen.getByRole("dialog")));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("keeps Tab inside the dialog it declares modal", async () => {
+    // `aria-modal="true"` promises assistive technology the rest of the page is
+    // inert, and nothing enforces that. Without containment, three Tabs from
+    // Confirm reach the Record button behind the backdrop — where Enter starts a
+    // recording under a modal the user cannot see past.
+    const user = userEvent.setup();
+    render(
+      <RecordingList
+        {...BASE_PROPS}
+        sessions={[makeSession("a", "Standup"), makeSession("b", "Retro")]}
+        onDelete={(): void => undefined}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Delete Standup" }));
+    const dialog = screen.getByRole("dialog");
+
+    for (let i = 0; i < 6; i++) {
+      await user.tab();
+      expect(dialog.contains(document.activeElement)).toBe(true);
+    }
+    await user.tab({ shift: true });
+    expect(dialog.contains(document.activeElement)).toBe(true);
+  });
+
+  it("returns focus to the control that opened it", async () => {
+    // A keyboard user who tabs down a long sidebar to reach a delete trigger and
+    // then cancels must not be dropped on <body> and made to traverse it again.
+    const user = userEvent.setup();
+    render(
+      <RecordingList
+        {...BASE_PROPS}
+        sessions={[makeSession("a", "Standup")]}
+        onDelete={(): void => undefined}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Delete Standup" });
+    await user.click(trigger);
+    await user.keyboard("{Escape}");
+
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("names an untitled recording the same way in the row, the label and the prompt", async () => {
+    // One naming answer. The trigger used to say "Delete recording" while the
+    // row and the prompt said "Untitled recording" — and for a topic of "" the
+    // trigger's name collapsed to a bare "Delete", colliding with the dialog's
+    // own confirm button.
+    const user = userEvent.setup();
+    render(
+      <RecordingList
+        {...BASE_PROPS}
+        sessions={[makeSession("a", "")]}
+        onDelete={(): void => undefined}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Delete Untitled recording" }));
 
     expect(screen.getByRole("dialog")).toHaveTextContent("Untitled recording");
   });

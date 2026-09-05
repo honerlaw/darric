@@ -39,12 +39,14 @@ interface HeaderProps {
   downloadProgress: number | null;
   elapsedSeconds: number;
   /**
-   * A stopped recording is selected and a resume could actually start right now:
-   * nothing is recording, no start is already in flight, and the speech model is
-   * not downloading. False hides the button rather than disabling it — there is
-   * nothing for it to act on when no recording is selected.
+   * The name of the recording Resume would continue, or null when there is
+   * nothing to continue: no recording is selected, one is already in flight, a
+   * start is already in flight, or the speech model is still downloading. Null
+   * hides the button rather than disabling it — there is nothing for it to act
+   * on. Carrying the name rather than a bare boolean is what lets the button say
+   * which recording it appends to, now that it no longer sits beside one.
    */
-  canResume: boolean;
+  resumeTarget: string | null;
   onRecord: () => void;
   onStop: () => void;
   onResume: () => void;
@@ -56,7 +58,7 @@ export function Header({
   isStopping,
   downloadProgress,
   elapsedSeconds,
-  canResume,
+  resumeTarget,
   onRecord,
   onStop,
   onResume,
@@ -97,13 +99,13 @@ export function Header({
         {phaseAnnouncement(isRecording, isStopping)}
       </span>
 
-      {canResume && (
+      {resumeTarget !== null && (
         // Sits beside Record because it is the same action against an existing
         // recording: both ways to begin capturing are in one place.
         <button
           type="button"
           onClick={onResume}
-          aria-label="Resume recording"
+          aria-label={`Resume recording “${resumeTarget}”`}
           className="flex h-[30px] cursor-pointer items-center rounded-full border border-line bg-paper px-[14px] text-[13px] text-ink transition-colors hover:border-line-strong hover:bg-paper-sunken"
         >
           Resume
