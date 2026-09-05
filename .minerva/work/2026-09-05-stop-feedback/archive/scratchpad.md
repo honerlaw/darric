@@ -55,7 +55,7 @@ subagent. Findings 1-9 are the code review's, numbering continued from the audit
   recording, so the banner prop also picks up the viewing-is-active gate)
 - **7** [low] the sidebar's pulsing dot keys off `activeSessionId`, which is never reset, so it
   pulses forever after a recording stops → **SUGGEST** (pre-existing, writable failure scenario;
-  outside this unit's stated window — the seed is about the seconds *during* the stop)
+  outside this unit's stated window — the seed is about the seconds _during_ the stop)
 - **8** [low] `isStarting` reaches `RecorderPane` without the viewing-is-active gate, so a
   different selected recording reads "Starting…" → **SUGGEST** (pre-existing; the
   `droppedSegments` half was fixed under 6 because 6 made it load-bearing)

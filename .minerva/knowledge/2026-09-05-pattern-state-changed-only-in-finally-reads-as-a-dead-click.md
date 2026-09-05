@@ -22,12 +22,12 @@ try {
   setError(String(e));
 } finally {
   setIsRecording(false);
-  clearInterval(timerRef.current);   // ← the clock kept ticking until here
+  clearInterval(timerRef.current); // ← the clock kept ticking until here
   await refresh();
 }
 ```
 
-Nothing is wrong with any single line. The defect is that the *only* state transition happens
+Nothing is wrong with any single line. The defect is that the _only_ state transition happens
 after the await.
 
 ## Finding
@@ -47,7 +47,7 @@ Two consequences that a "just show a spinner" framing misses:
    would have been simpler and wrong: `canResume` is `!isRecording && …`, so it would have put a
    live "Resume recording" button in front of the user while the first engine's workers were
    still draining. The honest model is `recording → stopping → stopped`, with the old flag
-   staying true and *"actively capturing"* re-expressed as `isRecording && !isStopping`.
+   staying true and _"actively capturing"_ re-expressed as `isRecording && !isStopping`.
 
 ## Implications
 

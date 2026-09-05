@@ -67,8 +67,8 @@ click.
    delivers is inert because of the hook guard in (2), and an `sr-only` `role="status"` carries
    the phase (but not the ticking clock, which would narrate every second). The native
    `disabled` is kept for the genuine cannot-start cases. The `recording · MM:SS` line becomes
-   `finishing · MM:SS` with every pulse removed, including the button's own dot. *(Review
-   finding 5.)*
+   `finishing · MM:SS` with every pulse removed, including the button's own dot. _(Review
+   finding 5.)_
 
 5. **`RecorderPane`** reports the recording as finishing rather than listening, in the elapsed
    line, the empty-transcript message and the blinking caret. Its `isStopping` prop carries the
@@ -82,7 +82,7 @@ click.
    zero — and because the poll is gated on the recording being live, it never runs again. The
    count is only readable before the click. Since the warning now outlives the recording, the
    `droppedSegments` prop picks up the viewing-is-active gate too. Not in the original plan;
-   added from *review finding 6*, and the reason is recorded in
+   added from _review finding 6_, and the reason is recorded in
    [[2026-09-05-reference-stop-session-releases-the-engine-before-teardown]].
 
 Rejected:
@@ -125,11 +125,11 @@ Rejected:
 Filed during promote; none is a regression from this diff.
 
 - honerlaw/darric#21 — the sidebar's recording dot never clears after a recording stops
-  (`activeSessionId` is never reset). *medium*
+  (`activeSessionId` is never reset). _medium_
 - honerlaw/darric#22 — `isStarting` reaches `RecorderPane` without the viewing-is-active gate.
-  *medium*
+  _medium_
 - honerlaw/darric#23 — a session switch during the post-stop linger appends flush lines to the
-  wrong transcript. *medium*
+  wrong transcript. _medium_
 
 ## Open Questions
 

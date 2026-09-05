@@ -35,7 +35,7 @@ Four consequences, all observed:
 2. **`capture_drop_count` returns `0`** for the same reason. This is destructive rather than
    merely stale: a poll landing in the window overwrites a real "transcription fell behind — N
    segments dropped" warning with zero, and since the poll is gated on the recording being live
-   it never runs again. The count is only readable *before* the click, so anything displaying it
+   it never runs again. The count is only readable _before_ the click, so anything displaying it
    must stop polling at the click rather than when the command returns.
 3. **The true final drop count is unreachable.** Segments can still be dropped during the flush,
    and by then nothing can read the counter. What the user sees is the count as of the click.
