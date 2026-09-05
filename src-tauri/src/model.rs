@@ -52,8 +52,10 @@ pub async fn ensure_model(app: &AppHandle) -> Result<PathBuf> {
         downloaded += chunk.len() as u64;
         file.write_all(&chunk).await?;
 
-        if total > 0 {
-            let pct = u32::try_from(downloaded * 100 / total).unwrap_or(100);
+        // `checked_div` yields `None` when `total` is 0 (server sent no
+        // Content-Length), which is exactly the case the progress log skips.
+        if let Some(ratio) = (downloaded * 100).checked_div(total) {
+            let pct = u32::try_from(ratio).unwrap_or(100);
             if pct >= last_reported_pct + 5 {
                 last_reported_pct = pct;
                 #[allow(clippy::cast_precision_loss)]
