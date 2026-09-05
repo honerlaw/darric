@@ -10,11 +10,14 @@
 
 ## Bugs
 
+- [[2026-09-05-bug-arc-try-unwrap-after-sharing-fails-silently]] — reclaiming ownership with `Arc::try_unwrap(x).ok()` after clones have been handed out fails deterministically, and `.ok()` turns that failure into a plausible `None` that disables the feature with no error
+- [[2026-09-05-bug-phase-progress-misreads-squash-merged-phases]] — `phasing.md` feeds `phase_progress()` from `git branch --merged`, which cannot see a squash-merged branch — so a phase that has shipped reads as pending and would be re-shipped forever
 - [[2026-09-05-bug-prettierignore-misses-generated-tauri-schemas]] — `.prettierignore` did not exclude the git-ignored `src-tauri/gen/` Tauri schemas, so `npm run format` failed locally for anyone who had run a build — while CI stayed green because it formats before those files exist
 
 ## Patterns
 
 - [[2026-09-05-pattern-ui-rewrites-drop-state-guards-not-markup]] — rewriting a screen from its rendered shape carries the visible markup across but loses per-selection state resets and cross-entity guards — the parts with no visual counterpart
+- [[2026-09-05-pattern-verifying-a-sequence-says-nothing-about-whether-it-runs]] — a completion check confirmed the flush/shutdown ordering inside `stop()` was correct, and it was — but the `if let Some(pool)` guard above it was never true, so none of the verified steps executed
 
 ## Constraints
 
@@ -26,3 +29,4 @@
 - [[2026-09-05-reference-clippy-ceiling-configured-not-enforced]] — `AGENTS.md` calls `all=deny` + pedantic + nursery + cargo "the ceiling", but only `all` and `correctness` are deny — pedantic and nursery are warn, and no lint command passes `-D warnings`, so those violations stay green
 - [[2026-09-05-reference-knowledge-corpus-not-ci-gated]] — `check.yml` runs TypeScript/Rust builds and tests only — nothing runs `knowledge_lint.py`, so index drift and broken `[[…]]` wikilinks reach `main` green
 - [[2026-09-05-reference-knowledge-wiki-is-ci-gated]] — `check.yml`'s `Knowledge Wiki` job runs `knowledge_lint.py` on every pull request and every push to main — index drift and broken wikilinks are errors, uncatalogued entries and missing reciprocals are warnings
+- [[2026-09-05-reference-whisper-inference-serialises-on-one-metal-gpu]] — measured 1.14x speedup from 4x the threads against one shared `WhisperContext`, so pool size buys almost nothing and the queue's overflow policy is what protects a recording

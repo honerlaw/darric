@@ -48,3 +48,4 @@ This was caught here only because ship's phase-resolution step was run and print
 ## Related
 
 - [[2026-09-05-decision-strip-darric-to-a-recorder]] — the phased unit whose declaration hit this
+- [[2026-09-05-bug-phase-progress-misreads-squash-merged-phases]] — see also
