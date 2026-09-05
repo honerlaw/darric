@@ -38,7 +38,7 @@ Two candidates were rejected:
 
 - **One aggregate device for everything** (all input sub-devices plus all output taps in a
   single aggregate, one IOProc, demux by channel offset). Core Audio would resolve cross-device
-  clock drift internally, which is a real advantage. Rejected because it puts *all* capture
+  clock drift internally, which is a real advantage. Rejected because it puts _all_ capture
   behind the FFI path, so Phase 2 could not ship without Phase 3's unsafe code. A secondary
   concern — that one hot-unplug tears down the whole aggregate — is an **assumption, not a
   verified fact**, and is not load-bearing for the rejection.
@@ -73,7 +73,7 @@ story rests on, and it is not obvious from the API's name.
 
 `AudioHardwareTapping.h` is `#ifdef __OBJC__`-guarded and is **not** included by `CoreAudio.h`,
 so `coreaudio-sys` does not bind `AudioHardwareCreateProcessTap` / `AudioHardwareDestroyProcessTap`
-(verified: zero hits in the generated bindings). It *does* bind `AudioHardwareCreateAggregateDevice`
+(verified: zero hits in the generated bindings). It _does_ bind `AudioHardwareCreateAggregateDevice`
 and the `kAudioAggregateDeviceTapListKey` / `kAudioSubTapUIDKey` constants.
 
 Before hand-transcribing those two signatures, **survey the cheaper options first**: pointing
@@ -158,15 +158,15 @@ and the `useConversation` / `useNotes` / `useTasks` / `useTags` / `useSearch` ho
 
 **Rewritten, not deleted** — these reference doomed modules and will not compile untouched:
 
-| File | Why |
-|---|---|
-| `src-tauri/src/state.rs` | `AppState` holds `ai_harness`, `chat_history`, `mcp`, `mcp_server` |
+| File                                 | Why                                                                                      |
+| ------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `src-tauri/src/state.rs`             | `AppState` holds `ai_harness`, `chat_history`, `mcp`, `mcp_server`                       |
 | `src-tauri/src/commands/settings.rs` | `save_setting` constructs providers on `ai.*` keys; `list_mcp_servers` reads `state.mcp` |
-| `src-tauri/src/db/mod.rs` | `load_chat_history` imports `ChatMessage`/`ContentBlock`/`Role` from `crate::ai` |
-| `src-tauri/src/lib.rs` | the `generate_handler!` list registers 20 commands that no longer exist |
-| `src/App.tsx` | imports and wires nine deleted components and hooks |
-| `src/screens/MeetingScreen.tsx` | imports `TagInput`; colors by `speaker_label` |
-| `src/components/layout/Header.tsx` | hard-codes nav tabs for screens that no longer exist |
+| `src-tauri/src/db/mod.rs`            | `load_chat_history` imports `ChatMessage`/`ContentBlock`/`Role` from `crate::ai`         |
+| `src-tauri/src/lib.rs`               | the `generate_handler!` list registers 20 commands that no longer exist                  |
+| `src/App.tsx`                        | imports and wires nine deleted components and hooks                                      |
+| `src/screens/MeetingScreen.tsx`      | imports `TagInput`; colors by `speaker_label`                                            |
+| `src/components/layout/Header.tsx`   | hard-codes nav tabs for screens that no longer exist                                     |
 
 Migration dropping `notes`, `tasks`, `tags`, `session_tags`, `note_tags`, `task_tags` and
 `chat_messages`. This permanently destroys the contents of those tables in the live database at

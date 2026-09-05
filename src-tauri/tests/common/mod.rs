@@ -19,6 +19,7 @@ pub fn open_test_db() -> Connection {
         M::up(include_str!("../../migrations/006_chat.sql")),
         M::up(include_str!("../../migrations/007_speaker_label.sql")),
         M::up(include_str!("../../migrations/008_tags.sql")),
+        M::up(include_str!("../../migrations/009_strip_to_recorder.sql")),
     ])
     .to_latest(&mut conn)
     .expect("migrations failed");

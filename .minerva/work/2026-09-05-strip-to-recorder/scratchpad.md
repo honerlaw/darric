@@ -20,3 +20,40 @@
   `audio/mod.rs` (`dead_code`, `non_send_fields_in_send_ty`, three cast lints),
   `audio/microphone.rs` and `transcription/mod.rs`. Success criterion 2 fixes them rather than
   carrying them forward. Related to the finding above — unenforced rules drift.
+
+## Phase 1 implementation notes 2026-09-05
+
+- Deleted more orphaned code than the proposal inventoried: `src-tauri/src/claude/` (`mod.rs`
+  and `sse.rs`, both the single line `// removed`, never declared in `lib.rs`),
+  `src-tauri/src/audio/system_tap.rs` (`// removed — mic-only capture`, never declared in
+  `audio/mod.rs`), `src/App.css` (empty) and `src/assets/react.svg` (unreferenced). Same class
+  as the dead code the proposal did name; no decision needed.
+- `sessions.notes` dropped along with the notes feature. The one-screen design has no notes
+  pane, and a column nothing reads is the cruft this unit exists to remove. SQLite has supported
+  `ALTER TABLE ... DROP COLUMN` since 3.35 and rusqlite's bundled build is far newer, so this is
+  a plain `ALTER`, unlike the Phase 2 CHECK-constraint change which still needs a table rebuild.
+- `update_session_notes` removed from the command surface with it; `lib.rs` now registers 9
+  commands, down from 30.
+- `tests/common/mod.rs` needed migration 009 added by hand. This is the duplication
+  `2026-05-19-decision-inline-tests-for-mcp-queries` warned about — the integration-test helper
+  restates the migration list from `db/migrations.rs`, and both must be edited together. The
+  entry's cost prediction landed exactly as written, even though the MCP code that motivated it
+  is gone.
+- Two nested ternaries (`Header.tsx`, `RecorderPane.tsx`) were extracted into named helper
+  functions rather than suppressed, per the `AGENTS.md` linting policy.
+- The five pre-existing `#[allow]` violations are deliberately NOT fixed in this phase. All of
+  them sit in `model.rs`, `audio/mod.rs`, `audio/microphone.rs` and `transcription/mod.rs` —
+  files Phase 2 rewrites for the multi-device engine and the model swap. Fixing them now means
+  doing the numeric-conversion work twice. Success criterion 2 is a unit-level bar, not a
+  phase-1 bar.
+
+## Findings pending promote (continued)
+
+- **`.prettierignore` omits `src-tauri/gen/`, so `npm run format` fails on any machine that has
+  built the app.** `src-tauri/gen/schemas` is Tauri-generated and git-ignored
+  (`src-tauri/.gitignore:7`), but prettier still walks it and reports all four schema JSON files
+  as unformatted. CI never sees this because the frontend job formats before anything generates
+  those files — so the failure reproduces only locally, for anyone who has run `tauri dev` or
+  `tauri build`. Fixed in this phase by adding `src-tauri/gen/` alongside the existing `dist/`
+  and `src-tauri/target/` entries. Candidate `bug` entry: a check that passes in CI and fails on
+  every developer machine is worse than one that fails in both.
