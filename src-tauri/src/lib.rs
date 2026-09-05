@@ -6,7 +6,7 @@ mod model;
 mod state;
 mod transcription;
 
-use commands::{devices, sessions, settings};
+use commands::{devices, model as model_commands, sessions, settings};
 use state::AppState;
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
@@ -65,6 +65,7 @@ pub fn run() {
             devices::list_capture_devices,
             devices::set_device_enabled,
             devices::capture_drop_count,
+            model_commands::model_download_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

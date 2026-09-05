@@ -24,7 +24,6 @@ const BASE_PROPS = {
   isStarting: false,
   canResume: true,
   elapsedSeconds: 0,
-  downloadProgress: null,
   onResume: (): void => undefined,
 };
 

@@ -1,8 +1,15 @@
 import type React from "react";
 import { formatElapsed } from "../../lib/utils";
 
-function recordLabel(isRecording: boolean, isStarting: boolean): string {
+function recordLabel(
+  isRecording: boolean,
+  isStarting: boolean,
+  downloadProgress: number | null,
+): string {
   if (isRecording) return "Stop";
+  // Checked before `isStarting`: pressing Record mid-download sets `isStarting`
+  // too, and "Starting…" is the label that made the download look like a freeze.
+  if (downloadProgress !== null) return `Downloading ${String(downloadProgress)}%`;
   if (isStarting) return "Starting…";
   return "Record";
 }
@@ -10,6 +17,8 @@ function recordLabel(isRecording: boolean, isStarting: boolean): string {
 interface HeaderProps {
   isRecording: boolean;
   isStarting: boolean;
+  /** Percentage of the speech model downloaded, or null when no download is in flight. */
+  downloadProgress: number | null;
   elapsedSeconds: number;
   onRecord: () => void;
   onStop: () => void;
@@ -18,10 +27,16 @@ interface HeaderProps {
 export function Header({
   isRecording,
   isStarting,
+  downloadProgress,
   elapsedSeconds,
   onRecord,
   onStop,
 }: HeaderProps): React.JSX.Element {
+  // Gates starting a recording, never stopping one: this is one button serving
+  // both roles, and disabling it while `isRecording` would strand the user
+  // unable to stop an active recording until an unrelated download finished.
+  const cannotStart = !isRecording && (isStarting || downloadProgress !== null);
+
   return (
     <header className="flex h-14 shrink-0 items-center gap-4 px-6" data-tauri-drag-region="true">
       <div className="flex items-center gap-2">
@@ -43,13 +58,13 @@ export function Header({
       <button
         type="button"
         onClick={isRecording ? onStop : onRecord}
-        disabled={isStarting}
+        disabled={cannotStart}
         className="flex h-[30px] cursor-pointer items-center gap-[6px] rounded-full border border-line bg-paper px-[14px] text-[13px] text-ink transition-colors hover:border-line-strong hover:bg-paper-sunken disabled:cursor-default disabled:opacity-40"
       >
         <span
           className={`h-[7px] w-[7px] rounded-full bg-accent ${isRecording ? "pulse-dot" : ""}`}
         />
-        <span>{recordLabel(isRecording, isStarting)}</span>
+        <span>{recordLabel(isRecording, isStarting, downloadProgress)}</span>
       </button>
     </header>
   );

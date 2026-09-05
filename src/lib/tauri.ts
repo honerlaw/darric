@@ -27,6 +27,11 @@ export const setDeviceEnabled = async (id: string, enabled: boolean): Promise<vo
 };
 export const captureDropCount = async (): Promise<number> => invoke<number>("capture_drop_count");
 
+// Model
+/** Percentage downloaded, or null when no download is in flight. */
+export const modelDownloadState = async (): Promise<number | null> =>
+  invoke<number | null>("model_download_state");
+
 // Settings
 export const saveSetting = async (key: string, value: string): Promise<void> => {
   await invoke("save_setting", { key, value });
@@ -62,4 +67,11 @@ export const onModelDownloadDone = async (handler: () => void): Promise<Unlisten
 export const onModelReady = async (handler: () => void): Promise<UnlistenFn> =>
   listen("model_ready", () => {
     handler();
+  });
+
+export const onModelDownloadError = async (
+  handler: (message: string) => void,
+): Promise<UnlistenFn> =>
+  listen<string>("model_download_error", (e) => {
+    handler(e.payload);
   });

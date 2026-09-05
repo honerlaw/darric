@@ -19,10 +19,13 @@ interface RecorderPaneProps {
   droppedSegments: number;
   isRecording: boolean;
   isStarting: boolean;
-  /** False while any recording is in flight — resuming a second one would be rejected. */
+  /**
+   * False while any recording is in flight (resuming a second one would be
+   * rejected) and while the speech model is still downloading (resuming would
+   * block on it, with no way to tell). Already includes `!isRecording`.
+   */
   canResume: boolean;
   elapsedSeconds: number;
-  downloadProgress: number | null;
   onResume: () => void;
   onRename: (topic: string) => void;
 }
@@ -37,7 +40,6 @@ export function RecorderPane({
   isStarting,
   canResume,
   elapsedSeconds,
-  downloadProgress,
   onResume,
   onRename,
 }: RecorderPaneProps): React.JSX.Element {
@@ -120,20 +122,6 @@ export function RecorderPane({
       </div>
 
       <div className="flex-1 overflow-y-auto border-t border-line px-10 py-5">
-        {downloadProgress !== null && (
-          <div className="mb-5 flex flex-col gap-2">
-            <p className="text-[13px] text-ink-3">
-              Downloading speech model ({String(downloadProgress)}%)…
-            </p>
-            <div className="h-1.5 w-full overflow-hidden rounded-full bg-paper-sunken">
-              <div
-                className="h-full rounded-full bg-accent transition-all duration-300"
-                style={{ width: `${String(downloadProgress)}%` }}
-              />
-            </div>
-          </div>
-        )}
-
         {droppedSegments > 0 && (
           <p className="mb-4 font-mono text-[11px] text-danger">
             Transcription fell behind — {String(droppedSegments)} segment
@@ -176,7 +164,7 @@ export function RecorderPane({
         )}
       </div>
 
-      {!isRecording && canResume && (
+      {canResume && (
         <div className="flex shrink-0 items-center gap-3 border-t border-line px-10 py-4">
           <button
             type="button"
