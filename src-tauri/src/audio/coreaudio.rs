@@ -19,7 +19,9 @@ use objc2_core_audio::{
     AudioObjectGetPropertyData, AudioObjectGetPropertyDataSize, AudioObjectID,
     AudioObjectPropertyAddress,
 };
-use objc2_core_audio_types::{AudioBufferList, AudioStreamBasicDescription};
+use objc2_core_audio_types::{
+    kAudioFormatFlagIsFloat, kAudioFormatLinearPCM, AudioBufferList, AudioStreamBasicDescription,
+};
 use objc2_core_foundation::{CFRetained, CFString};
 use std::ffi::c_void;
 use std::ptr::NonNull;
@@ -86,7 +88,14 @@ fn read_vec<T: Copy + Default>(
     }
 
     let mut buf: Vec<T> = vec![T::default(); count];
-    let mut io_size = size;
+    // Must describe the buffer that actually exists. `count` is a floor
+    // division, so when `size` is not a whole multiple of `size_of::<T>()`,
+    // passing `size` here would advertise up to `elem - 1` bytes more capacity
+    // than was allocated — a heap overflow if Core Audio wrote them.
+    let mut io_size = count
+        .checked_mul(elem as usize)
+        .and_then(|n| u32::try_from(n).ok())
+        .ok_or_else(|| AppError::Audio("property buffer size overflow".into()))?;
     let mut addr = *addr;
     // SAFETY: `buf` holds exactly `size` bytes (count * size_of::<T>()), which
     // is the size Core Audio just reported for this property, and it stays
@@ -173,6 +182,23 @@ pub fn input_stream_format(id: AudioObjectID) -> Result<(u32, u16)> {
         )));
     }
     let rate = exact_u32_from_f64(f.mSampleRate.round());
+    // The sample reader interprets buffers as 32-bit float. Verify that rather
+    // than assume it: a 4-byte-per-sample integer format would pass the length
+    // check downstream and be bit-reinterpreted into convincing noise instead
+    // of failing visibly.
+    if f.mFormatID != kAudioFormatLinearPCM || (f.mFormatFlags & kAudioFormatFlagIsFloat) == 0 {
+        return Err(AppError::Audio(format!(
+            "device stream is not float linear PCM (format id {:#x}, flags {:#x})",
+            f.mFormatID, f.mFormatFlags
+        )));
+    }
+    if f.mBitsPerChannel != 32 {
+        return Err(AppError::Audio(format!(
+            "device stream is {} bits per channel, expected 32",
+            f.mBitsPerChannel
+        )));
+    }
+
     let channels = u16::try_from(f.mChannelsPerFrame)
         .map_err(|_| AppError::Audio("channel count out of range".into()))?;
     if channels == 0 {

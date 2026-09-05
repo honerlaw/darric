@@ -37,6 +37,8 @@ use objc2_core_foundation::CFDictionary;
 use objc2_foundation::{NSArray, NSDictionary, NSNumber, NSString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::ptr::NonNull;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 /// Convert one of Core Audio's `&CStr` dictionary keys into an `NSString`.
 fn key(raw: &std::ffi::CStr) -> objc2::rc::Retained<NSString> {
@@ -53,6 +55,9 @@ pub struct OutputTap {
     /// The aggregate's UID, so the engine can exclude it from input enumeration.
     aggregate_uid: String,
     device_name: String,
+    /// Cleared before the device is stopped, so a callback already in flight
+    /// returns without touching anything.
+    running: Arc<AtomicBool>,
 }
 
 impl OutputTap {
@@ -98,13 +103,15 @@ impl OutputTap {
         };
         log::info!("[tap] {device_name}: {rate} Hz, {channels} ch");
 
-        match start_io_proc(aggregate_id, rate, channels, on_samples) {
+        let running = Arc::new(AtomicBool::new(true));
+        match start_io_proc(aggregate_id, rate, channels, &running, on_samples) {
             Ok(proc_id) => Ok(Self {
                 tap_id,
                 aggregate_id,
                 proc_id,
                 aggregate_uid: own_uid,
                 device_name: device_name.to_string(),
+                running,
             }),
             Err(e) => {
                 destroy_aggregate(aggregate_id);
@@ -117,6 +124,12 @@ impl OutputTap {
 
 impl Drop for OutputTap {
     fn drop(&mut self) {
+        // Tell any in-flight callback to do nothing, before asking the device
+        // to stop. `AudioDeviceStop` is expected to quiesce the IO thread, but
+        // the binding's documentation does not promise it, so this flag closes
+        // the window rather than relying on that.
+        self.running.store(false, Ordering::SeqCst);
+
         // Reverse construction order: stop delivering, release the proc, then
         // the aggregate, then the tap. Every one of these is a system-wide
         // object that survives the process if it is not destroyed.
@@ -228,11 +241,13 @@ fn start_io_proc<F>(
     aggregate_id: AudioObjectID,
     rate: u32,
     channels: u16,
+    running: &Arc<AtomicBool>,
     on_samples: F,
 ) -> Result<AudioDeviceIOProcID>
 where
     F: Fn(&[f32]) + Send + Sync + 'static,
 {
+    let running_for_cb = Arc::clone(running);
     let block = RcBlock::new(
         move |_now: NonNull<AudioTimeStamp>,
               input: NonNull<AudioBufferList>,
@@ -242,6 +257,9 @@ where
             // A panic here would cross a C boundary and abort the process, so
             // it is contained: one malformed buffer must cost this device's
             // audio, not the whole recording.
+            if !running_for_cb.load(Ordering::SeqCst) {
+                return;
+            }
             let result = catch_unwind(AssertUnwindSafe(|| {
                 // SAFETY: Core Audio guarantees `input` points at a valid
                 // buffer list for the duration of the callback.
@@ -288,17 +306,22 @@ where
              check System Settings > Privacy & Security > Microphone for Darric."
         )));
     }
-    // Deliberately leaked into Core Audio's ownership: the block must outlive
-    // this function and is released when the IOProc is destroyed.
-    std::mem::forget(block);
+    // `block` drops here, releasing OUR reference. Core Audio `Block_copy`d it
+    // and, per the binding's own documentation, "the reference [is] maintained
+    // until a matching call to AudioDeviceDestroyIOProcID" — so the block stays
+    // alive exactly as long as the IOProc does. The previous `mem::forget` here
+    // skipped this release, leaking the whole captured environment (a segmenter
+    // holding seconds of audio, plus pool and status handles) on every tap.
     Ok(proc_id)
 }
 
 /// Flatten a buffer list of 32-bit float samples into one interleaved slice.
 ///
-/// A tap delivers one buffer per stream. Anything that is not 32-bit float is
-/// ignored rather than reinterpreted — guessing at a format would produce
-/// convincing noise rather than an obvious failure.
+/// A tap delivers one buffer per stream. That the stream really is 32-bit float
+/// linear PCM is checked once, up front, by
+/// [`super::coreaudio::input_stream_format`] — reinterpreting some other
+/// 4-byte format here would produce convincing noise rather than an obvious
+/// failure, so the tap refuses to start instead.
 fn interleaved_f32(list: &AudioBufferList) -> Vec<f32> {
     let count = list.mNumberBuffers as usize;
     if count == 0 {

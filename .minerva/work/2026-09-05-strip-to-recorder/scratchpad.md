@@ -362,3 +362,60 @@ runtime-verified.
   fails at `AudioDeviceStart`. The natural assumption is that creation would fail, so error
   handling written around creation alone would report success on a tap that can never deliver
   audio. Worth an entry together with the `cargo test` / TCC limitation.
+
+## Review finding 2026-09-05 (phase 3, FFI safety)
+
+A safety-focused review of the unsafe Core Audio code found five issues. Four fixed, one
+documented. It found nothing wrong with the property wrappers' SAFETY comments, the flexible-array
+walk over `AudioBufferList.mBuffers`, the toll-free bridge cast, panic containment, or the
+partial-construction cleanup paths.
+
+### 1. HIGH — `mem::forget(block)` leaked the whole captured environment
+
+`AudioDeviceCreateIOProcIDWithBlock`'s own documentation, carried in the binding, says the block
+"will be `Block_copy`'d and the reference maintained until a matching call to
+`AudioDeviceDestroyIOProcID`". Core Audio therefore takes its **own** reference, and the caller's
+`RcBlock` +1 still has to be released. `mem::forget` skipped that release, so every tap leaked its
+captured environment permanently — an `Arc<Mutex<Segmenter>>` holding up to eight seconds of
+audio, plus pool and status handles, per recording session, accumulating across start/stop cycles.
+
+Fixed by simply letting `block` drop at the end of `start_io_proc`. The comment there had asserted
+the opposite of what the API contract says; the fix is smaller than the bug.
+
+### 2. MEDIUM — `read_vec` advertised more buffer capacity than it allocated
+
+`count = size / elem` floors, but `io_size` was still the OS-reported `size`. For any non-byte
+`T` where `size` is not a whole multiple of `size_of::<T>()`, that hands Core Audio a capacity up
+to `elem - 1` bytes beyond the allocation — a heap overflow primitive if it ever wrote them. Not
+reachable today (a HAL returning a non-4-aligned `AudioObjectID` array would be badly broken), but
+the helper did not enforce the invariant it needed. `io_size` is now derived from the buffer.
+
+### 3. MEDIUM — a latent teardown race that fixing #1 would have exposed
+
+The reviewer's sharpest observation: `Drop` calls `AudioDeviceStop` then immediately
+`AudioDeviceDestroyIOProcID`, relying on `AudioDeviceStop` having quiesced the IO thread — which
+is widely assumed but **not** promised by the binding's documentation. While #1 was live the
+block's refcount could never reach zero, so `Block_release` never actually freed anything and the
+race was unreachable. Fixing #1 naively would have restored correct refcounting _and_ re-armed a
+use-after-free.
+
+Fixed together, as the reviewer advised: a `running: Arc<AtomicBool>` is cleared before
+`AudioDeviceStop`, and the block returns immediately when it is false. That closes the window
+rather than relying on an undocumented guarantee. Two bugs where fixing one alone would have been
+worse than fixing neither.
+
+### 4. LOW — realtime safety of the tap callback (documented, not fixed)
+
+The callback takes a blocking mutex and allocates, on a Core Audio realtime thread. This mirrors
+what the cpal input path has always done, and no deadlock or crash follows from it — the only
+other holder of that mutex is the stop-path flush, which cannot overlap a live callback. Recorded
+as a known soft-realtime risk rather than papered over; a lock-free ring buffer is the real answer
+if glitching ever shows up in practice.
+
+### 5. LOW — a comment claimed a format check that did not exist
+
+`interleaved_f32`'s doc said non-float formats were "ignored rather than reinterpreted", but
+nothing inspected `mFormatID` or `mFormatFlags` — only that the byte count divided by four. A
+32-bit integer PCM stream would have been bit-reinterpreted into convincing noise. Rather than
+weaken the comment to match the code, `input_stream_format` now verifies linear PCM, the float
+flag, and 32 bits per channel, and the tap refuses to start otherwise. The claim is now true.
