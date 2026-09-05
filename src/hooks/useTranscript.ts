@@ -23,11 +23,18 @@ export function useTranscript(sessionId: string | null, isLive: boolean): Transc
     prevIsLiveRef.current = isLive;
 
     const appendChunk = (chunk: TranscriptChunk): void => {
+      // The chunk says which session it belongs to, so a late flush line for a
+      // recording the user has clicked away from is dropped rather than appended
+      // under whatever is now selected. Capturing the id when the listener is
+      // attached would not work: the `[sessionId]` effect above is declared
+      // first, so on the render where the selection changes `sessionRef.current`
+      // is already the new session by the time this effect re-runs.
+      if (chunk.session_id !== sessionRef.current) return;
       setLines((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
-          session_id: sessionRef.current ?? "",
+          session_id: chunk.session_id,
           device_id: chunk.device_id,
           device_name: chunk.device_name,
           direction: chunk.direction,

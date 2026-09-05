@@ -20,6 +20,7 @@ export default function App(): React.JSX.Element {
     activeSessionId,
     isRecording,
     isStarting,
+    startingSessionId,
     isStopping,
     downloadProgress,
     elapsedSeconds,
@@ -126,7 +127,7 @@ export default function App(): React.JSX.Element {
         <RecordingList
           sessions={sessions}
           selectedId={viewingSessionId}
-          activeId={activeSessionId}
+          activeId={isRecording ? activeSessionId : null}
           onSelect={setViewingSessionId}
           onDelete={handleDelete}
         />
@@ -139,7 +140,7 @@ export default function App(): React.JSX.Element {
           }}
           droppedSegments={viewingSessionId === activeSessionId ? droppedSegments : 0}
           isRecording={isRecording && viewingSessionId === activeSessionId}
-          isStarting={isStarting}
+          isStarting={startingSessionId !== null && viewingSessionId === startingSessionId}
           isStopping={isStopping && viewingSessionId === activeSessionId}
           elapsedSeconds={elapsedSeconds}
           canResume={!isRecording && downloadProgress === null}

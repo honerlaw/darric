@@ -301,6 +301,11 @@ fn persist_and_emit(db: &Arc<DbConn>, app: &AppHandle, session_id: &str, line: &
     app.emit(
         "transcript_chunk",
         serde_json::json!({
+            // The chunk names its own session: the frontend keeps this listener
+            // alive past the end of a recording to catch whisper's async flush,
+            // and without an id it cannot tell a late chunk for the session that
+            // just stopped from one for the session now on screen.
+            "session_id": session_id,
             "device_id": line.device_id,
             "device_name": line.device_name,
             "direction": line.direction.as_str(),
