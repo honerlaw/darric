@@ -118,3 +118,76 @@ textbox present, but the mutation experiment was not run.
 - `knowledge_lint.py`: 0 errors, 9 warnings, all `pending reconciliation` — the expected add-only shape. The supersession banners satisfied the reciprocal check for the four superseded entries, so only the five genuinely new forward links are unreciprocated.
 
 - [decided] proposal `## Phases` was written as `### N. Name` subsections, which `read_phases` parses as ZERO phases because its scan breaks at the next `#` line. Ship would have treated a 3-phase unit as unphased and cleanup would have torn down the worktree after phase 1, stranding phases 2-3 with no error anywhere. Rewritten to the canonical numbered-list form (verified: 3 phases now parse) and promoted as `2026-09-05-constraint-phases-must-use-the-canonical-list-form`. Formatting fix to match a documented contract, not a plan change — not a replan trigger.
+
+## Phase 2 implementation notes 2026-09-05
+
+### The pool-sizing question is answered — and the answer changes the design's emphasis
+
+The proposal left open whether concurrent `state.full()` calls against one shared
+`WhisperContext` parallelise on a single Metal GPU. `transcription::bench::pool_sizing_measurement`
+now measures it: four 8-second segments, serial then concurrent, on Apple Silicon with `small.en`.
+
+- serial: **1.746 s**
+- parallel (4 threads): **1.537 s**
+- **speedup: 1.14x from 4x the threads**
+
+Inference is effectively serialised on the GPU; the ~14% is CPU-side pre/post-processing
+overlapping. So the worker pool is **not** a throughput device, and `WHISPER_WORKERS = 2` recovers
+essentially all of the available gain. What actually protects a recording when transcription falls
+behind is the queue's drop-oldest policy — exactly what the proposal predicted would carry the
+design if this measurement came back flat. Measured with `small.en` because that is what was
+downloaded; the serialisation conclusion is a property of the GPU queue and should hold for
+`large-v3-turbo`, but the absolute timings will not.
+
+### Two `unsafe` blocks removed rather than carried forward
+
+`SendableStream` existed only because the old code built a `cpal::Stream` on one thread and moved
+it to another, which needed `unsafe impl Send` plus an `#[allow(clippy::non_send_fields_in_send_ty)]`.
+Each source's supervisor thread now builds, watches and drops its own stream, so the stream never
+crosses a thread boundary and the unsafety is gone — not asserted past. `unsafe impl Send/Sync for
+Transcriber` remains; it is whisper-rs's own soundness claim, not ours.
+
+### The lint ceiling is now actually met
+
+Clippy reports **0 warnings** across `--all-targets` with `pedantic` + `nursery` + `cargo` enabled —
+`main` had 4. All five inherited `#[allow]` sites are gone: the resampler carries its position as
+fixed-point integers instead of casting a float cursor back to an index (which also removes
+accumulating drift, so it is a correctness improvement rather than lint appeasement), `rms`
+accumulates its sample count as `f32`, and the model-download progress logs in whole megabytes.
+
+`cargo clippy --fix` rewrote `wait - slept` as `wait.checked_sub(slept).unwrap()` — trading a
+possible panic for a certain one, and putting an `unwrap` in production code. Replaced with
+`saturating_sub`. Worth remembering that `--fix` optimises for silencing the lint, not for the
+better program.
+
+### Dead code was deleted rather than allowed
+
+The first cut included an `ExclusionRegistry` for phase 3's own-device filtering, plus
+`default_input_name`, `state_label` and `queued`. None had a caller, so all of them tripped
+`dead_code` — and the policy forbids `#[allow]`. They were removed. Phase 3 adds the exclusion
+filter when it has a first caller; the requirement is recorded in the proposal and in a module-level
+comment in `audio/device.rs`, which is where someone building the tap will actually be reading.
+
+### Two tests hung and had to be reclassified
+
+`enumeration_yields_unique_stable_ids` and `an_absent_device_gives_up_without_hanging_the_caller`
+both drive real Core Audio enumeration, and under `cargo test`'s parallel execution they hung for
+over 60 seconds and held the target lock. Both are now `#[ignore]`d with the reason stated. They
+test `cpal` and the machine's hardware, not this crate's logic, and the pure state transitions are
+covered without hardware. A hanging test is worse than a failing one: it produces no verdict.
+
+Also of note: `timeout` does not exist on macOS (it is `gtimeout`, from coreutils), so two
+verification runs silently produced nothing at all rather than failing loudly.
+
+### Findings pending promote (phase 2)
+
+- **`phasing.md`'s phase-progress snippet is wrong for a squash-merging repo.** It feeds
+  `phase_progress()` from `git branch --merged <default>`. PR #7 was squash-merged, so phase 1's
+  commits never landed on `main` as themselves and `--merged` cannot see that branch at all —
+  `phase_progress` reported `merged: 0` for a phase that had shipped. `merge-detection.md` already
+  knows about squash merges and checks `gh pr list --state merged` first; the phasing snippet does
+  not. A unit shipping its phases on a squash-merging repo would re-ship phase 1 forever. Candidate
+  `bug` entry against the minerva tooling.
+- **A freshly cut phase branch with zero commits reads as "merged"**, because it is identical to
+  the default branch. Combined with the above, phase resolution is only trustworthy once the phase
+  has at least one commit. Worth folding into the same entry.

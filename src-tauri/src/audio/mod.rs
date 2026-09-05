@@ -1,266 +1,232 @@
-pub mod microphone;
+//! The capture engine: N devices in, one transcript out.
+//!
+//! Every enabled device gets its own supervisor thread ([`source`]) and its own
+//! [`segmenter::Segmenter`], so the devices are independent — one failing or
+//! being unplugged does not disturb the others. Completed segments go to a
+//! shared [`crate::transcription::pool::TranscriptionPool`], which is where
+//! backpressure is absorbed.
 
-use crate::{
-    error::Result,
-    state::{AudioHandle, DbConn},
-    transcription::{speaker_tracker::SpeakerTracker, Transcriber},
-};
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    mpsc, Arc, Mutex,
-};
+pub mod device;
+pub mod resample;
+pub mod segmenter;
+pub mod source;
+
+use crate::error::Result;
+use crate::state::DbConn;
+use crate::transcription::pool::{SegmentJob, TranscribedLine, TranscriptionPool};
+use crate::transcription::Transcriber;
+use device::CaptureDevice;
+use segmenter::Segmenter;
+use source::{SharedStatus, SourceStatus};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
 use tauri::{AppHandle, Emitter};
 
-// cpal::Stream has PhantomData<*mut ()> making it !Send.
-// It is safe to move to another thread for the purpose of keeping it alive;
-// the internal callbacks run on Core Audio's own threads.
-#[allow(clippy::non_send_fields_in_send_ty)]
-pub struct SendableStream(#[allow(dead_code)] cpal::Stream);
-unsafe impl Send for SendableStream {}
+/// Segments held per source before the oldest is dropped.
+///
+/// Four segments is ~32 s of audio. Beyond that the transcript is so far behind
+/// real time that catching up matters more than completeness — and the drop is
+/// counted and surfaced either way.
+const QUEUE_CAPACITY_PER_SOURCE: usize = 4;
 
-// 8s balances responsiveness vs. Whisper accuracy (trained on 30s; < 5s causes hallucinations)
-const SEGMENT_SECONDS: u64 = 8;
-const SAMPLE_RATE: u32 = 16_000;
-#[allow(clippy::cast_lossless, clippy::cast_possible_truncation)]
-const SEGMENT_SAMPLES: usize = (SAMPLE_RATE as u64 * SEGMENT_SECONDS) as usize;
-
-#[derive(Clone, Copy)]
-pub enum AudioSource {
-    Mic,
-}
-
-pub struct AudioChunk {
-    pub source: AudioSource,
-    pub samples: Vec<f32>,
-}
-
-pub fn start_capture(
+/// A running capture session across every enabled device.
+pub struct CaptureEngine {
     session_id: String,
-    app: AppHandle,
-    db: Arc<DbConn>,
-    transcriber: Option<Arc<Transcriber>>,
-    speaker_tracker: Arc<Mutex<SpeakerTracker>>,
-) -> Result<AudioHandle> {
-    let shutdown = Arc::new(AtomicBool::new(false));
-    let (tx, rx) = mpsc::sync_channel::<AudioChunk>(256);
+    shutdown: Arc<AtomicBool>,
+    threads: Vec<JoinHandle<()>>,
+    statuses: Vec<SharedStatus>,
+    segmenters: Vec<(CaptureDevice, Arc<Mutex<Segmenter>>)>,
+    pool: Option<TranscriptionPool>,
+}
 
-    let mic_stream = microphone::start_mic_capture(tx, shutdown.clone())?;
+impl CaptureEngine {
+    /// Start capturing every device in `devices`.
+    ///
+    /// With no transcriber the audio is still captured and metered — the UI
+    /// stays honest about which devices are live while the model loads — but
+    /// nothing is transcribed.
+    pub fn start(
+        session_id: String,
+        devices: Vec<CaptureDevice>,
+        transcriber: Option<Arc<Transcriber>>,
+        worker_count: usize,
+        app: &AppHandle,
+        db: &Arc<DbConn>,
+    ) -> Result<Self> {
+        let shutdown = Arc::new(AtomicBool::new(false));
 
-    if transcriber.is_none() {
-        log::warn!("[audio] no transcriber — audio will be captured but not transcribed");
-    }
+        let pool = transcriber.map(|t| {
+            let sink_db = Arc::clone(db);
+            let sink_app = app.clone();
+            let sink_session = session_id.clone();
+            let sink: crate::transcription::pool::LineSink =
+                Arc::new(move |line: TranscribedLine| {
+                    persist_and_emit(&sink_db, &sink_app, &sink_session, &line);
+                });
+            TranscriptionPool::new(
+                &t,
+                worker_count,
+                QUEUE_CAPACITY_PER_SOURCE * devices.len().max(1),
+                &sink,
+            )
+        });
+        if pool.is_none() {
+            log::warn!("[audio] no transcriber — capturing without transcription");
+        }
+        let pool = Arc::new(pool);
 
-    let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
-    let shutdown_flag = shutdown.clone();
+        let mut threads = Vec::new();
+        let mut statuses = Vec::new();
+        let mut segmenters = Vec::new();
 
-    tokio::spawn(async move {
-        shutdown_rx.await.ok();
-        shutdown_flag.store(true, Ordering::SeqCst);
-    });
+        for dev in devices {
+            let status: SharedStatus = Arc::new(Mutex::new(SourceStatus::new(dev.clone())));
+            let seg = Arc::new(Mutex::new(Segmenter::new()));
+            statuses.push(Arc::clone(&status));
+            segmenters.push((dev.clone(), Arc::clone(&seg)));
 
-    let rt_handle = tokio::runtime::Handle::current();
-    let session_id_drain = session_id.clone();
-    let shutdown_drain = shutdown;
+            let pool_for_source = Arc::clone(&pool);
+            let dev_for_cb = dev.clone();
+            let shutdown_for_source = Arc::clone(&shutdown);
 
-    log::info!(
-        "[audio] drain thread starting (segment={SEGMENT_SECONDS}s, {SEGMENT_SAMPLES} samples)"
-    );
-
-    std::thread::spawn(move || {
-        let _mic = mic_stream;
-        let mut mic_buf: Vec<f32> = Vec::new();
-        let mut chunks_received: u64 = 0;
-
-        loop {
-            if shutdown_drain.load(Ordering::Relaxed) {
-                log::info!(
-                    "[audio] shutdown — flushing {} buffered samples",
-                    mic_buf.len()
-                );
-                flush_segment(
-                    &mic_buf,
-                    AudioSource::Mic,
-                    &session_id_drain,
-                    transcriber.as_ref(),
-                    speaker_tracker.clone(),
-                    &app,
-                    &db,
-                    &rt_handle,
-                );
-                log::info!("[audio] drain thread exiting ({chunks_received} chunks total)");
-                break;
-            }
-
-            match rx.recv_timeout(std::time::Duration::from_millis(200)) {
-                Ok(chunk) => {
-                    chunks_received += 1;
-                    mic_buf.extend_from_slice(&chunk.samples);
-
-                    #[allow(clippy::cast_precision_loss)]
-                    if chunks_received % 50 == 1 {
-                        log::debug!(
-                            "[audio] buf={}/{} samples ({:.1}s/{:.1}s)",
-                            mic_buf.len(),
-                            SEGMENT_SAMPLES,
-                            mic_buf.len() as f32 / SAMPLE_RATE as f32,
-                            SEGMENT_SECONDS as f32
-                        );
-                    }
-
-                    while mic_buf.len() >= SEGMENT_SAMPLES {
-                        let segment: Vec<f32> = mic_buf.drain(..SEGMENT_SAMPLES).collect();
-                        #[allow(clippy::cast_precision_loss)]
-                        {
-                            log::info!(
-                                "[audio] segment ready ({} samples, {:.1}s) — sending to whisper",
-                                segment.len(),
-                                segment.len() as f32 / SAMPLE_RATE as f32
-                            );
+            let handle = std::thread::Builder::new()
+                .name(format!("capture-{}", dev.name))
+                .spawn(move || {
+                    source::run_source(&dev_for_cb.clone(), &status, &shutdown_for_source, {
+                        let seg = Arc::clone(&seg);
+                        let pool = Arc::clone(&pool_for_source);
+                        move |samples| {
+                            // Short, effectively uncontended critical section: the
+                            // only other holder is the flush at stop.
+                            let ready = {
+                                let mut s = seg
+                                    .lock()
+                                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                                s.push(samples)
+                            };
+                            for segment in ready {
+                                if let Some(p) = pool.as_ref() {
+                                    p.submit(job(&dev_for_cb, segment));
+                                }
+                            }
                         }
-                        transcribe_and_emit(
-                            segment,
-                            chunk.source,
-                            session_id_drain.clone(),
-                            transcriber.clone(),
-                            speaker_tracker.clone(),
-                            app.clone(),
-                            db.clone(),
-                            &rt_handle,
-                        );
-                    }
-                }
-                Err(mpsc::RecvTimeoutError::Timeout) => {}
-                Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    log::warn!("[audio] channel disconnected");
-                    break;
-                }
-            }
+                    });
+                })
+                .map_err(|e| crate::error::AppError::Audio(e.to_string()))?;
+            threads.push(handle);
         }
-    });
 
-    Ok(AudioHandle {
-        session_id,
-        shutdown_tx: Some(shutdown_tx),
-    })
-}
+        let pool = Arc::try_unwrap(pool).ok().flatten();
 
-fn flush_segment(
-    samples: &[f32],
-    source: AudioSource,
-    session_id: &str,
-    transcriber: Option<&Arc<Transcriber>>,
-    speaker_tracker: Arc<Mutex<SpeakerTracker>>,
-    app: &AppHandle,
-    db: &Arc<DbConn>,
-    rt: &tokio::runtime::Handle,
-) {
-    if samples.is_empty() {
-        return;
+        Ok(Self {
+            session_id,
+            shutdown,
+            threads,
+            statuses,
+            segmenters,
+            pool,
+        })
     }
-    transcribe_and_emit(
-        samples.to_vec(),
-        source,
-        session_id.to_string(),
-        transcriber.cloned(),
-        speaker_tracker,
-        app.clone(),
-        db.clone(),
-        rt,
-    );
-}
 
-#[allow(
-    clippy::cast_precision_loss,
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss
-)]
-fn transcribe_and_emit(
-    segment: Vec<f32>,
-    source: AudioSource,
-    session_id: String,
-    transcriber: Option<Arc<Transcriber>>,
-    speaker_tracker: Arc<Mutex<SpeakerTracker>>,
-    app: AppHandle,
-    db: Arc<DbConn>,
-    rt: &tokio::runtime::Handle,
-) {
-    let Some(t) = transcriber else {
-        log::debug!("[whisper] no transcriber available — skipping segment");
-        return;
-    };
-    let src_label = match source {
-        AudioSource::Mic => "mic",
+    pub fn session_id(&self) -> &str {
+        &self.session_id
     }
-    .to_string();
-    let n_samples = segment.len();
 
-    rt.spawn(async move {
-        log::info!(
-            "[whisper] transcribing {} samples ({:.1}s)…",
-            n_samples,
-            n_samples as f32 / 16000.0
-        );
-        let start = std::time::Instant::now();
+    /// Snapshot of every source, for the UI's device rows.
+    pub fn statuses(&self) -> Vec<SourceStatus> {
+        self.statuses
+            .iter()
+            .map(|s| {
+                s.lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clone()
+            })
+            .collect()
+    }
 
-        match tokio::task::spawn_blocking(move || t.transcribe(&segment).map(|segs| (segs, segment))).await {
-            Ok(Ok((whisper_segments, audio))) => {
-                log::info!(
-                    "[whisper] done in {:.2}s → {} segment(s)",
-                    start.elapsed().as_secs_f32(),
-                    whisper_segments.len()
-                );
+    /// Segments discarded because transcription fell behind.
+    pub fn dropped_segments(&self) -> u64 {
+        self.pool.as_ref().map_or(0, TranscriptionPool::dropped)
+    }
 
-                for ws in whisper_segments {
-                    if ws.text.is_empty() {
-                        continue;
-                    }
+    /// Stop every source, flush trailing partial segments, and drain the pool.
+    pub fn stop(self) {
+        self.shutdown.store(true, Ordering::SeqCst);
+        for t in self.threads {
+            t.join().ok();
+        }
 
-                    // Extract audio for this segment to compute speaker fingerprint
-                    let start_sample = (ws.start_ms * SAMPLE_RATE as i64 / 1000) as usize;
-                    let end_sample = ((ws.end_ms * SAMPLE_RATE as i64 / 1000) as usize)
-                        .min(audio.len());
-                    let seg_audio = if end_sample > start_sample {
-                        &audio[start_sample..end_sample]
-                    } else {
-                        &audio[..]
-                    };
-
-                    let speaker_id = {
-                        let mut tracker = speaker_tracker.lock().unwrap();
-                        tracker.identify_or_register(seg_audio)
-                    };
-                    let speaker_label = format!("Speaker {}", speaker_id + 1);
-
+        // Flush after the sources are stopped so nothing races the final push.
+        if let Some(pool) = self.pool.as_ref() {
+            for (dev, seg) in &self.segmenters {
+                let tail = seg
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .flush();
+                if let Some(samples) = tail {
                     log::info!(
-                        "[whisper] {speaker_label}: {:?}",
-                        ws.text
+                        "[audio] flushing {} trailing samples for {}",
+                        samples.len(),
+                        dev.name
                     );
-
-                    let now = chrono::Utc::now().to_rfc3339();
-                    let id = uuid::Uuid::new_v4().to_string();
-                    {
-                        let conn = db.0.lock().unwrap();
-                        conn.execute(
-                            "INSERT INTO transcript_lines(id, session_id, source, content, recorded_at, speaker_label)
-                             VALUES(?1, ?2, ?3, ?4, ?5, ?6)",
-                            rusqlite::params![id, session_id, src_label, ws.text, now, speaker_label],
-                        )
-                        .ok();
-                    }
-                    app.emit(
-                        "transcript_chunk",
-                        serde_json::json!({
-                            "source": src_label,
-                            "speaker_label": speaker_label,
-                            "content": ws.text,
-                            "recorded_at": now,
-                        }),
-                    )
-                    .ok();
+                    pool.submit(job(dev, samples));
                 }
             }
-            Ok(Err(e)) => log::error!("[whisper] transcription error: {e}"),
-            Err(e) => log::error!("[whisper] spawn_blocking error: {e}"),
         }
-    });
+
+        if let Some(pool) = self.pool {
+            let dropped = pool.dropped();
+            pool.shutdown();
+            if dropped > 0 {
+                log::warn!("[audio] {dropped} segment(s) were dropped this session");
+            }
+        }
+    }
+}
+
+fn job(device: &CaptureDevice, samples: Vec<f32>) -> SegmentJob {
+    SegmentJob {
+        device_id: device.id.clone(),
+        device_name: device.name.clone(),
+        direction: device.direction,
+        samples,
+    }
+}
+
+fn persist_and_emit(db: &Arc<DbConn>, app: &AppHandle, session_id: &str, line: &TranscribedLine) {
+    let now = chrono::Utc::now().to_rfc3339();
+    let id = uuid::Uuid::new_v4().to_string();
+    {
+        let conn =
+            db.0.lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Err(e) = conn.execute(
+            "INSERT INTO transcript_lines(
+                 id, session_id, device_id, device_name, direction, content, recorded_at)
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            rusqlite::params![
+                id,
+                session_id,
+                line.device_id,
+                line.device_name,
+                line.direction.as_str(),
+                line.text,
+                now
+            ],
+        ) {
+            log::error!("[audio] failed to persist transcript line: {e}");
+        }
+    }
+    app.emit(
+        "transcript_chunk",
+        serde_json::json!({
+            "device_id": line.device_id,
+            "device_name": line.device_name,
+            "direction": line.direction.as_str(),
+            "content": line.text,
+            "recorded_at": now,
+        }),
+    )
+    .ok();
 }

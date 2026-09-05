@@ -11,5 +11,6 @@ pub fn migrations() -> Migrations<'static> {
         M::up(include_str!("../../migrations/007_speaker_label.sql")),
         M::up(include_str!("../../migrations/008_tags.sql")),
         M::up(include_str!("../../migrations/009_strip_to_recorder.sql")),
+        M::up(include_str!("../../migrations/010_device_attribution.sql")),
     ])
 }

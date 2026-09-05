@@ -6,7 +6,7 @@ mod model;
 mod state;
 mod transcription;
 
-use commands::{sessions, settings};
+use commands::{devices, sessions, settings};
 use state::AppState;
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
@@ -20,7 +20,8 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let conn = db::open().map_err(|e| e.to_string())?;
-            let state = AppState::new(conn);
+            let disabled = devices::load_disabled(&conn);
+            let state = AppState::new(conn, disabled);
 
             // Pre-load whisper in background so the first session starts instantly
             let transcriber_slot = state.transcriber.clone();
@@ -61,6 +62,9 @@ pub fn run() {
             sessions::resume_session,
             settings::save_setting,
             settings::get_setting,
+            devices::list_capture_devices,
+            devices::set_device_enabled,
+            devices::capture_drop_count,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

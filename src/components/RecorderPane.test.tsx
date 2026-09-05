@@ -18,6 +18,8 @@ function makeSession(id: string, topic: string): Session {
 const BASE_PROPS = {
   transcriptLines: [],
   devices: [],
+  onToggleDevice: (): void => undefined,
+  droppedSegments: 0,
   isRecording: false,
   isStarting: false,
   canResume: true,

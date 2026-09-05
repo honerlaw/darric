@@ -4,9 +4,13 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Emitter};
 use tokio::io::AsyncWriteExt;
 
+// large-v3-turbo replaces small.en-tdrz: tinydiarize existed only to emit
+// [SPEAKER_TURN] tokens for speaker attribution, which is now derived from the
+// originating device instead. Turbo is multilingual and markedly more accurate
+// at comparable speed on Apple Silicon with Metal.
 const MODEL_URL: &str =
-    "https://huggingface.co/akashmjn/tinydiarize-whisper.cpp/resolve/main/ggml-small.en-tdrz.bin";
-const MODEL_FILENAME: &str = "ggml-small.en-tdrz.bin";
+    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin";
+const MODEL_FILENAME: &str = "ggml-large-v3-turbo.bin";
 
 pub fn default_model_path() -> PathBuf {
     let home = std::env::var("HOME").map_or_else(|_| PathBuf::from("/tmp"), PathBuf::from);
@@ -36,10 +40,7 @@ pub async fn ensure_model(app: &AppHandle) -> Result<PathBuf> {
     }
 
     let total = response.content_length().unwrap_or(0);
-    #[allow(clippy::cast_precision_loss)]
-    {
-        log::info!("[model] {:.1} MB to download", total as f64 / 1_048_576.0);
-    }
+    log::info!("[model] {} MB to download", total / 1_048_576);
 
     let tmp_path = path.with_extension("tmp");
     let mut file = tokio::fs::File::create(&tmp_path).await?;
@@ -58,15 +59,12 @@ pub async fn ensure_model(app: &AppHandle) -> Result<PathBuf> {
             let pct = u32::try_from(ratio).unwrap_or(100);
             if pct >= last_reported_pct + 5 {
                 last_reported_pct = pct;
-                #[allow(clippy::cast_precision_loss)]
-                {
-                    log::info!(
-                        "[model] {}% ({:.1}/{:.1} MB)",
-                        pct,
-                        downloaded as f64 / 1_048_576.0,
-                        total as f64 / 1_048_576.0
-                    );
-                }
+                log::info!(
+                    "[model] {}% ({}/{} MB)",
+                    pct,
+                    downloaded / 1_048_576,
+                    total / 1_048_576
+                );
                 app.emit("model_download_progress", pct).ok();
             }
         }

@@ -1,27 +1,29 @@
-use crate::transcription::{speaker_tracker::SpeakerTracker, Transcriber};
+use crate::audio::CaptureEngine;
+use crate::transcription::Transcriber;
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 
 pub struct DbConn(pub Mutex<rusqlite::Connection>);
 
-pub struct AudioHandle {
-    pub session_id: String,
-    pub shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
-}
-
 pub struct AppState {
     pub db: Arc<DbConn>,
-    pub audio: Mutex<Option<AudioHandle>>,
+    /// The running capture session, if any.
+    pub engine: Mutex<Option<CaptureEngine>>,
     pub transcriber: Arc<Mutex<Option<Arc<Transcriber>>>>,
-    pub speaker_tracker: Arc<Mutex<SpeakerTracker>>,
+    /// Device ids the user has switched OFF. Everything discovered is captured
+    /// by default — "record everything" is the point — so this stores the
+    /// exceptions rather than the selections, and a newly plugged-in device is
+    /// therefore live without needing to be enabled by hand.
+    pub disabled_devices: Mutex<HashSet<String>>,
 }
 
 impl AppState {
-    pub fn new(conn: rusqlite::Connection) -> Self {
+    pub fn new(conn: rusqlite::Connection, disabled_devices: HashSet<String>) -> Self {
         Self {
             db: Arc::new(DbConn(Mutex::new(conn))),
-            audio: Mutex::new(None),
+            engine: Mutex::new(None),
             transcriber: Arc::new(Mutex::new(None)),
-            speaker_tracker: Arc::new(Mutex::new(SpeakerTracker::new())),
+            disabled_devices: Mutex::new(disabled_devices),
         }
     }
 }

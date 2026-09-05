@@ -3,15 +3,13 @@ import { useEffect, useState } from "react";
 import { Header } from "./components/layout/Header";
 import { RecorderPane } from "./components/RecorderPane";
 import { RecordingList } from "./components/RecordingList";
+import { useDevices } from "./hooks/useDevices";
 import { useSession } from "./hooks/useSession";
 import { useTranscript } from "./hooks/useTranscript";
-import type { CaptureDevice } from "./types";
+import { captureDropCount } from "./lib/tauri";
 
-// Phase 1 captures the default microphone only. The real device list arrives with
-// the multi-device capture engine; this placeholder keeps the layout honest until then.
-const PLACEHOLDER_DEVICES: CaptureDevice[] = [
-  { id: "default-input", name: "Default microphone", direction: "input", enabled: true },
-];
+/** How often the dropped-segment counter refreshes while recording. */
+const DROP_POLL_MS = 2000;
 
 export default function App(): React.JSX.Element {
   const [viewingSessionId, setViewingSessionId] = useState<string | null>(null);
@@ -30,6 +28,9 @@ export default function App(): React.JSX.Element {
     update,
     remove: removeSession,
   } = useSession();
+
+  const { devices, toggle: toggleDevice } = useDevices(isRecording);
+  const [droppedSegments, setDroppedSegments] = useState(0);
 
   const transcriptLines = useTranscript(
     viewingSessionId,
@@ -54,6 +55,20 @@ export default function App(): React.JSX.Element {
   useEffect(() => {
     if (isRecording && activeSessionId !== null) setViewingSessionId(activeSessionId);
   }, [isRecording, activeSessionId]);
+
+  useEffect(() => {
+    if (!isRecording) return;
+    const timer = setInterval(() => {
+      void captureDropCount()
+        .then(setDroppedSegments)
+        .catch(() => {
+          // A failed count is not worth surfacing; the next tick retries.
+        });
+    }, DROP_POLL_MS);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [isRecording]);
 
   const handleRecord = (): void => {
     void start("Recording").catch((err: unknown) => {
@@ -108,7 +123,11 @@ export default function App(): React.JSX.Element {
         <RecorderPane
           session={viewingSession}
           transcriptLines={transcriptLines}
-          devices={PLACEHOLDER_DEVICES}
+          devices={devices}
+          onToggleDevice={(id, enabled) => {
+            void toggleDevice(id, enabled);
+          }}
+          droppedSegments={droppedSegments}
           isRecording={isRecording && viewingSessionId === activeSessionId}
           isStarting={isStarting}
           elapsedSeconds={elapsedSeconds}

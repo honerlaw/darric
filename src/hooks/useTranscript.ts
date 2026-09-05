@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getSessionTranscript, onTranscriptChunk } from "../lib/tauri";
-import type { TranscriptLine } from "../types";
+import type { TranscriptChunk, TranscriptLine } from "../types";
 
 // Whisper processes the flush segment asynchronously after stop. Keep the
 // listener alive this long after recording ends so the chunk still lands.
@@ -22,17 +22,15 @@ export function useTranscript(sessionId: string | null, isLive: boolean): Transc
     const wasLive = prevIsLiveRef.current;
     prevIsLiveRef.current = isLive;
 
-    const appendChunk = (chunk: {
-      source: "mic" | "speaker";
-      content: string;
-      recorded_at: string;
-    }): void => {
+    const appendChunk = (chunk: TranscriptChunk): void => {
       setLines((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
           session_id: sessionRef.current ?? "",
-          source: chunk.source,
+          device_id: chunk.device_id,
+          device_name: chunk.device_name,
+          direction: chunk.direction,
           content: chunk.content,
           recorded_at: chunk.recorded_at,
         },
