@@ -30,6 +30,18 @@ use tokio::sync::Mutex;
 /// restarted. Re-checking under a lock leaves the next caller free to retry.
 pub type TranscriberSlot = Arc<Mutex<Option<Arc<Transcriber>>>>;
 
+/// Whether [`get_or_init`] reused the stored value or had to produce one.
+///
+/// Returned rather than logged in place because `get_or_init` is generic and has
+/// no name for what it is loading. The distinction is the single most useful
+/// line when diagnosing this area: it says whether a slow start was waiting on a
+/// download or was served instantly from the slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Origin {
+    Cached,
+    Loaded,
+}
+
 /// Return the value in `slot`, running `init` to produce it if it is empty.
 ///
 /// The lock is held across `init`, which is what makes this single-flight:
@@ -42,18 +54,18 @@ pub type TranscriberSlot = Arc<Mutex<Option<Arc<Transcriber>>>>;
 async fn get_or_init<T, Fut>(
     slot: &Mutex<Option<Arc<T>>>,
     init: impl FnOnce() -> Fut + Send,
-) -> Result<Arc<T>>
+) -> Result<(Arc<T>, Origin)>
 where
     T: Send + Sync,
     Fut: Future<Output = Result<T>> + Send,
 {
     let mut guard = slot.lock().await;
     if let Some(existing) = guard.as_ref() {
-        return Ok(Arc::clone(existing));
+        return Ok((Arc::clone(existing), Origin::Cached));
     }
     let value = Arc::new(init().await?);
     *guard = Some(Arc::clone(&value));
-    Ok(value)
+    Ok((value, Origin::Loaded))
 }
 
 /// The user's overriding model path, if they have set one.
@@ -78,12 +90,29 @@ pub async fn get_or_load(
     slot: &TranscriberSlot,
     db: &DbConn,
 ) -> Result<Arc<Transcriber>> {
-    // Logged before the lock is taken, so a start that is waiting on someone
-    // else's in-flight download is visible in the log rather than looking hung.
-    log::info!("[transcriber] requesting the shared whisper model");
-    get_or_init(slot, || async {
+    // Probed rather than logged unconditionally: a line emitted on every call
+    // says nothing, whereas a failed `try_lock` means someone really is mid-load
+    // and this caller is about to wait minutes for them. Advisory only — losing
+    // the race between the probe and the real lock costs a log line, nothing more.
+    if slot.try_lock().is_err() {
+        log::info!("[transcriber] waiting for an in-flight model load");
+    }
+
+    let (transcriber, origin) = get_or_init(slot, || async {
         let path = match custom_model_path(db) {
-            Some(p) => PathBuf::from(p),
+            // A configured path that no longer exists used to be irrelevant,
+            // because the startup pre-load ignored the setting entirely. Now that
+            // both paths consult it, honouring a stale one would fail every
+            // `Transcriber::new` forever with no way to clear it from the UI —
+            // the setting is written to the database and read nowhere in `src/`.
+            Some(p) if std::path::Path::new(&p).exists() => PathBuf::from(p),
+            Some(p) => {
+                log::warn!(
+                    "[transcriber] configured whisper_model_path {p:?} does not exist — \
+                     falling back to the downloaded model"
+                );
+                crate::model::ensure_model(app).await?
+            }
             None => crate::model::ensure_model(app).await?,
         };
 
@@ -98,11 +127,19 @@ pub async fn get_or_load(
                 AppError::Transcription(format!("loading the whisper model panicked: {e}"))
             })??;
 
-        log::info!("[transcriber] ready");
+        // Note that on the startup path this reaches no webview at all — see
+        // `2026-09-05-constraint-tauri-events-from-setup-reach-no-webview`. It is
+        // kept for the session path and for parity with the previous behaviour.
         app.emit("model_ready", ()).ok();
         Ok(transcriber)
     })
-    .await
+    .await?;
+
+    match origin {
+        Origin::Cached => log::info!("[transcriber] served from the already-loaded model"),
+        Origin::Loaded => log::info!("[transcriber] ready"),
+    }
+    Ok(transcriber)
 }
 
 #[cfg(test)]
@@ -115,35 +152,48 @@ mod tests {
     #[derive(Debug, PartialEq, Eq)]
     struct Fake(usize);
 
-    #[tokio::test]
+    /// Multi-threaded so the callers genuinely contend rather than merely
+    /// interleaving at await points inside one task.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn concurrent_callers_load_once_and_share_the_result() {
         // The bug this module exists to prevent: two callers each ran their own
         // load. Here `runs` must end at 1 no matter how many ask.
-        let slot: Mutex<Option<Arc<Fake>>> = Mutex::new(None);
-        let runs = AtomicUsize::new(0);
+        let slot: Arc<Mutex<Option<Arc<Fake>>>> = Arc::new(Mutex::new(None));
+        let runs = Arc::new(AtomicUsize::new(0));
 
-        let init = || async {
-            let n = runs.fetch_add(1, Ordering::SeqCst);
-            // Yield so the other callers are polled mid-load; without the lock
-            // they would each proceed to run `init` themselves.
-            tokio::task::yield_now().await;
-            Ok(Fake(n))
-        };
+        let handles: Vec<_> = (0..4)
+            .map(|_| {
+                let slot = Arc::clone(&slot);
+                let runs = Arc::clone(&runs);
+                tokio::spawn(async move {
+                    get_or_init(&slot, || async {
+                        let n = runs.fetch_add(1, Ordering::SeqCst);
+                        // Long enough that a missing lock lets the others in.
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                        Ok(Fake(n))
+                    })
+                    .await
+                })
+            })
+            .collect();
 
-        let (a, b, c) = tokio::join!(
-            get_or_init(&slot, init),
-            get_or_init(&slot, init),
-            get_or_init(&slot, init),
-        );
+        let mut values = Vec::new();
+        for h in handles {
+            values.push(h.await.expect("task").expect("load"));
+        }
 
         assert_eq!(runs.load(Ordering::SeqCst), 1, "init must run exactly once");
-        let (a, b, c) = (
-            a.expect("first caller"),
-            b.expect("second caller"),
-            c.expect("third caller"),
+        assert_eq!(
+            values.iter().filter(|(_, o)| *o == Origin::Loaded).count(),
+            1,
+            "exactly one caller reports having loaded it"
         );
-        assert!(Arc::ptr_eq(&a, &b), "callers share one transcriber");
-        assert!(Arc::ptr_eq(&b, &c), "callers share one transcriber");
+        for (v, _) in &values[1..] {
+            assert!(
+                Arc::ptr_eq(&values[0].0, v),
+                "callers share one transcriber"
+            );
+        }
     }
 
     #[tokio::test]
@@ -159,25 +209,66 @@ mod tests {
         assert!(failed.is_err(), "the first load fails");
         assert!(slot.lock().await.is_none(), "nothing is cached");
 
-        let recovered = get_or_init(&slot, || async { Ok(Fake(7)) })
+        let (recovered, origin) = get_or_init(&slot, || async { Ok(Fake(7)) })
             .await
             .expect("the next caller retries");
         assert_eq!(*recovered, Fake(7));
+        assert_eq!(origin, Origin::Loaded);
+    }
+
+    /// The reported scenario's shape: a caller is already queued behind a load
+    /// that then fails. It must run its own `init` rather than inherit the
+    /// failure or observe a half-stored value.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_caller_queued_behind_a_failing_load_retries_it() {
+        let slot: Arc<Mutex<Option<Arc<Fake>>>> = Arc::new(Mutex::new(None));
+
+        let first = {
+            let slot = Arc::clone(&slot);
+            tokio::spawn(async move {
+                get_or_init(&slot, || async {
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    Err(AppError::Transcription("download failed".into()))
+                })
+                .await
+            })
+        };
+        // Give the first caller time to take the lock before the second queues.
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+
+        let second = {
+            let slot = Arc::clone(&slot);
+            tokio::spawn(async move { get_or_init(&slot, || async { Ok(Fake(2)) }).await })
+        };
+
+        assert!(first.await.expect("task").is_err(), "the first load fails");
+        let (value, origin) = second
+            .await
+            .expect("task")
+            .expect("the queued caller recovers");
+        assert_eq!(*value, Fake(2));
+        assert_eq!(
+            origin,
+            Origin::Loaded,
+            "it ran its own init, not a cached one"
+        );
     }
 
     #[tokio::test]
     async fn an_already_loaded_value_is_reused() {
         let slot: Mutex<Option<Arc<Fake>>> = Mutex::new(None);
-        let first = get_or_init(&slot, || async { Ok(Fake(1)) })
+        let (first, first_origin) = get_or_init(&slot, || async { Ok(Fake(1)) })
             .await
             .expect("first load");
+        assert_eq!(first_origin, Origin::Loaded);
 
-        let second = get_or_init(&slot, || async {
+        let (second, second_origin) = get_or_init(&slot, || async {
             panic!("must not reload an already-loaded transcriber")
         })
         .await
         .expect("second call");
 
         assert!(Arc::ptr_eq(&first, &second));
+        assert_eq!(second_origin, Origin::Cached);
     }
 }
