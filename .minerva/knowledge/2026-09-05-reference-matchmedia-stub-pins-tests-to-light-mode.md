@@ -36,4 +36,5 @@ loss than the branch it hides.
   override it explicitly; it cannot assume jsdom's absence of `matchMedia`.
 
 ## Related
+
 - [[2026-09-06-constraint-user-event-setup-replaces-navigator-clipboard]] — see also

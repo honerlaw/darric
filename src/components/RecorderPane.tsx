@@ -104,6 +104,7 @@ export function RecorderPane({
               setEditingTitle(false);
             }}
             onKeyDown={(e) => {
+              if (e.nativeEvent.isComposing) return;
               if (e.key === "Enter") {
                 if (titleDraft.trim() !== "") onRename(titleDraft);
                 setEditingTitle(false);

@@ -105,10 +105,10 @@ export default function App(): React.JSX.Element {
     void resume(viewingSessionId);
   };
 
-  const handleRename = (topic: string): void => {
-    if (viewingSessionId === null) return;
-    const trimmed = topic.trim();
-    void update(viewingSessionId, trimmed !== "" ? trimmed : undefined);
+  // Both callers only send a name that is non-empty once trimmed; the pane
+  // sends its raw draft, so the trim still has to happen here.
+  const handleRename = (id: string, topic: string): void => {
+    void update(id, topic.trim());
   };
 
   const handleDelete = (id: string): void => {
@@ -152,6 +152,7 @@ export default function App(): React.JSX.Element {
           activeId={isRecording && !isStopping ? activeSessionId : null}
           onSelect={setViewingSessionId}
           onDelete={handleDelete}
+          onRename={handleRename}
         />
         <RecorderPane
           session={viewingSession}
@@ -165,7 +166,9 @@ export default function App(): React.JSX.Element {
           isStarting={startingSessionId !== null && viewingSessionId === startingSessionId}
           isStopping={isStopping && viewingSessionId === activeSessionId}
           elapsedSeconds={elapsedSeconds}
-          onRename={handleRename}
+          onRename={(topic) => {
+            if (viewingSessionId !== null) handleRename(viewingSessionId, topic);
+          }}
         />
       </div>
 

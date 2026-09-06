@@ -842,3 +842,35 @@ describe("App delete failure handling", () => {
     expect(await screen.findByText(/Select a recording/)).toBeInTheDocument();
   });
 });
+
+describe("App sidebar rename", () => {
+  it("renames a recording from the sidebar through update_session", async () => {
+    const updates: unknown[] = [];
+    let topic = "Standup";
+    mockCommands({
+      model_download_state: () => null,
+      list_sessions: () => [{ ...PAST_SESSION, id: "a", topic }],
+      list_capture_devices: () => [],
+      capture_drop_count: () => 0,
+      mcp_server_status: () => MCP_LISTENING,
+      get_session_transcript: () => [],
+      update_session: (payload) => {
+        updates.push(payload);
+        topic = "Planning";
+        return { ...PAST_SESSION, id: "a", topic };
+      },
+    });
+    render(<App />);
+
+    fireEvent.doubleClick(await screen.findByText("Standup"));
+    const input = screen.getByRole("textbox", { name: "Rename Standup" });
+    fireEvent.change(input, { target: { value: "Planning" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // The sidebar re-reads the list after the write, so the new name showing up
+    // is the refresh, not an optimistic edit.
+    expect(await screen.findByText("Planning")).toBeInTheDocument();
+    expect(updates).toEqual([{ id: "a", topic: "Planning" }]);
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+});
