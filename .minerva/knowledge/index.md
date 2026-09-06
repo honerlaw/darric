@@ -12,6 +12,8 @@
 - [[2026-09-06-decision-mcp-server-reads-through-its-own-read-only-connection]] — MCP tools query a second `SQLITE_OPEN_READ_ONLY` connection, never the app's write connection, so an agent's query cannot delay a transcript insert and cannot write by drift
 - [[2026-09-06-decision-mcp-server-rebuilt-in-process-on-rmcp-3]] — darric again hosts a read-only MCP server in-process — rmcp 3.2, streamable HTTP on 127.0.0.1:27842/mcp, always on, four tools — reviving the four May 2026 MCP decisions the strip retired
 - [[2026-09-06-decision-one-test-db-helper-built-from-the-production-migration-list]] — inline Rust tests get their schema from `db::test_db()`, which runs `migrations::migrations()`, instead of each module re-listing every migration with `include_str!`
+- [[2026-09-06-decision-recorded-at-is-the-capture-time]] — every segment carries the wall-clock time of its first sample through the pool into `recorded_at`, and the live view inserts lines by it, so two devices' lines sort back into speech order
+- [[2026-09-06-decision-segments-end-at-pauses-found-by-an-energy-detector]] — the audio callback cuts segments at 400 ms of quiet after at least 2 s (25 s cap) using per-frame RMS against an adaptive floor; Silero, in the transcriber, still owns speech-vs-not
 - [[2026-09-06-decision-whisper-model-served-from-the-models-github-release]] — `MODEL_URL` points at the `models` release asset, not huggingface.co, and the streamed download must hash to `MODEL_SHA256` before rename
 
 ## Bugs
@@ -26,6 +28,7 @@
 - [[2026-09-05-bug-prettierignore-misses-generated-tauri-schemas]] — `.prettierignore` did not exclude the git-ignored `src-tauri/gen/` Tauri schemas, so `npm run format` failed locally for anyone who had run a build — while CI stayed green because it formats before those files exist
 - [[2026-09-05-bug-the-session-start-guard-is-check-then-act]] — `start_session` / `resume_session` check `engine.is_some()` at the top but install the engine only after the model load, so two commands could both pass and the second's engine silently replaced the first — whose threads and whisper workers then ran until the app quit
 - [[2026-09-06-bug-an-empty-page-with-no-cursor-restarts-the-poll-loop]] — `get_transcript` returned `next_cursor: null` on an empty page while telling the agent to pass `next_cursor` back, so a quiet poll restarted the transcript from line one; an empty page now echoes the caller's cursor
+- [[2026-09-06-bug-capture-stamps-drifted-after-a-delivery-gap]] — `started_at` was set only when the buffer was empty, and a pause cut never empties it, so after a rebuilt stream every later stamp extrapolated from the session's first callback; fixed by re-anchoring when a chunk arrives >100 ms late
 - [[2026-09-06-bug-whisper-transcribes-silence-as-thank-you]] — 8 s of digital zeros through large-v3-turbo decodes to "Thank you." at token probability 0.75; fixed by a Silero VAD gate in front of whisper, not by whisper.cpp's thresholds
 
 ## Patterns
@@ -71,6 +74,9 @@
 - [[2026-09-05-reference-stop-session-releases-the-engine-before-teardown]] — `stop_session` `take()`s the engine out of `AppState` synchronously on entry and only then spawns the blocking teardown, so for the seconds that follow every engine-derived command reports "no recording" while capture threads, segmenters and whisper workers are still running
 - [[2026-09-05-reference-whisper-inference-serialises-on-one-metal-gpu]] — measured 1.14x speedup from 4x the threads against one shared `WhisperContext`, so pool size buys almost nothing and the queue's overflow policy is what protects a recording
 - [[2026-09-06-reference-a-test-binary-holds-the-audio-permission-of-its-terminal]] — TCC grants audio capture to the responsible process, so once the dev app tapped a device from a terminal, test binaries launched from that terminal tap it too
+- [[2026-09-06-reference-a-windowed-sinc-resampler-needs-64-taps-for-40-db]] — a 32-tap Blackman sinc leaves a ~8 kHz transition band at 48 kHz, so 64 taps at 0.9× the lower Nyquist are used; it costs ~1 % of real time per stereo 48 kHz stream in release
 - [[2026-09-06-reference-an-isolated-home-gives-a-clean-first-launch]] — `default_model_path` and the SQLite database both hang off `$HOME`, so `HOME=<scratch dir> target/debug/darric` runs the startup model download against an empty cache without touching the real one
+- [[2026-09-06-reference-ci-clippy-runs-newer-than-a-local-toolchain]] — `dtolnay/rust-toolchain@stable` resolved clippy 1.98 while the machine ran 1.93; `chunks_exact_to_as_chunks` under `-D clippy::all` failed CI after a clean local `npm run check`
 - [[2026-09-06-reference-rmcp-3-streamable-http-client-needs-reqwest-0-13]] — `StreamableHttpClient` is implemented only for reqwest 0.13's `Client`; the model downloader is on 0.12, so the protocol test uses a renamed `reqwest13` dev-dependency
 - [[2026-09-06-reference-say-hangs-under-cargo-test-unless-stdin-is-closed]] — `Command::new("say")` with inherited stdin hangs forever under the test harness; `.stdin(Stdio::null())` makes it return in a second
+- [[2026-09-06-reference-say-under-cargo-test-needs-a-bounded-child-not-just-closed-stdin]] — `say` hung a second time with stdin already null; the fixture generator now polls the child, kills it after 30 s and retries once, and synthesizes the speech once per test process

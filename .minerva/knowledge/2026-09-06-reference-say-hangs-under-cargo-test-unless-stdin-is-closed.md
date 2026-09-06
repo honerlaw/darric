@@ -5,6 +5,9 @@
 **Summary**: `Command::new("say")` with inherited stdin hangs forever under the test harness; `.stdin(Stdio::null())` makes it return in a second
 **Context**: .minerva/work/2026-09-06-transcript-accuracy (see git history if the worktree has been cleaned up)
 
+<!-- superseded-by: 2026-09-06-reference-say-under-cargo-test-needs-a-bounded-child-not-just-closed-stdin -->
+> **Superseded by [[2026-09-06-reference-say-under-cargo-test-needs-a-bounded-child-not-just-closed-stdin]]** (2026-09-06)
+
 ## Context
 
 The transcription accuracy test needs real speech and the repo commits no audio, so the fixture
@@ -30,3 +33,4 @@ Setting `.stdin(std::process::Stdio::null())` on the command fixed it; the fixtu
 ## Related
 
 - [[2026-09-06-bug-whisper-transcribes-silence-as-thank-you]] — the accuracy test this fixture serves
+- [[2026-09-06-reference-say-under-cargo-test-needs-a-bounded-child-not-just-closed-stdin]] — superseded by

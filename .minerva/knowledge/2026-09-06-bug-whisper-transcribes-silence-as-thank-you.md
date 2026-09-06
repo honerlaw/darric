@@ -43,3 +43,4 @@ taps and microphone on real devices.
 - [[2026-09-05-decision-capture-engine-requires-a-transcriber]] — the transcriber the gate now lives inside
 - [[2026-09-05-bug-concurrent-model-downloads-share-one-tmp-file]] — why the bundled model is compared by bytes, not by presence
 - [[2026-09-06-reference-say-hangs-under-cargo-test-unless-stdin-is-closed]] — see also
+- [[2026-09-06-decision-segments-end-at-pauses-found-by-an-energy-detector]] — see also
