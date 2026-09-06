@@ -1,7 +1,7 @@
 # Proposal: whisper-model-github-release
 
 **Date**: 2026-09-06
-**Status**: Draft
+**Status**: Shipped (2026-09-06)
 
 ## Goal
 
@@ -32,54 +32,52 @@ and stays open.
 
 ## Approach
 
-1. **One-time release, outside the tree.** Create a release on the fixed tag `models`:
-   `gh release create models --target main --prerelease --title "Model assets" --notes …`,
-   then `gh release upload models ggml-large-v3-turbo.bin`. The tag is a stable, unversioned
-   home — assets are named by model file and the app pins exact bytes by checksum, so the tag
-   never needs a version suffix. It is a prerelease, like every DMG release: GitHub's Latest
-   badge goes to the newest non-prerelease, so `--latest=false` alone still made `models` the
-   repo's "latest release" the moment it was the only full one. Re-download the uploaded asset
-   and hash it to prove the upload is byte-exact.
-2. **`src-tauri/src/model.rs`.** `MODEL_URL` becomes
-   `https://github.com/honerlaw/darric/releases/download/models/ggml-large-v3-turbo.bin`. Add
-   `const MODEL_SHA256`. Feed every chunk to a `sha2::Sha256` inside the existing stream loop;
-   after the loop — and **before** `tokio::fs::rename` — compare the lower-hex digest with the
-   constant and return an `AppError::Audio("model download failed checksum …")` on mismatch, so
-   the existing failure path in `ensure_model` removes the `.tmp` and emits
-   `model_download_error`; on a match, log one line naming the verified digest. Also treat a
-   stream that ends with fewer bytes than `Content-Length` as a failure, guarded on `total > 0`
-   so a server that sends no `Content-Length` is not misreported (the checksum catches
-   truncation too, but the message should say "truncated" rather than "checksum"). Add `sha2 = "0.10"` to
-   `Cargo.toml` — already in `Cargo.lock` transitively, so no new compiled code.
-3. **Testable seam, minimal.** Extract the digest comparison into a pure
-   `fn verify_digest(actual_hex: &str) -> Result<()>` with an inline `#[cfg(test)] mod tests`
-   covering match and mismatch. Keep the diff small: a sibling unit
-   (`transcript-accuracy`, live session `darric-3f`) is generalising the downloader in this
-   file at the same time, and both branches will merge into it. Sequencing: whichever branch
-   lands first wins; the other rebases. If the sibling's `ensure_file(url, filename)` lands
-   first, this unit's checksum threads through that function rather than `download`.
-4. **README.** Say where the model is downloaded from and why (huggingface.co is blocked on
-   some networks), that the download is checksum-verified, and how to place the file by hand if
-   neither host is reachable.
+What shipped. See [[2026-09-06-decision-whisper-model-served-from-the-models-github-release]]
+for the decision record.
+
+1. **One-time release, outside the tree.** `gh release create models --target main
+--latest=false --title "Model assets"`, then `gh release upload models
+ggml-large-v3-turbo.bin` (77 s). `--latest=false` did not keep the release off the Latest
+   badge — every other release here is a prerelease, so the only full release is latest by
+   definition ([[2026-09-06-constraint-make-latest-false-cannot-hide-the-only-full-release]]) —
+   and the release was edited to a prerelease, which restored the no-Latest state. The tag is a
+   stable, unversioned home: assets are named by model file and the app pins exact bytes by
+   checksum.
+2. **`src-tauri/src/model.rs`.** `MODEL_URL` is
+   `https://github.com/honerlaw/darric/releases/download/models/ggml-large-v3-turbo.bin`
+   (redirects to `release-assets.githubusercontent.com`); `MODEL_SHA256` pins the bytes. Every
+   chunk feeds a `sha2::Sha256` inside the existing stream loop. After the loop and before the
+   rename, `check_length(total, downloaded)` rejects a stream that ended short of or past
+   `Content-Length` (skipped when the server sent none) and `verify_digest(MODEL_SHA256, …)`
+   rejects any other digest; both return an `AppError::Audio`, so `ensure_model`'s existing
+   failure path removes the `.tmp` and emits `model_download_error`. A match logs one line
+   naming the digest. `sha2 = "0.10"` was added to `Cargo.toml`; it was already in the lock.
+3. **Testable seams.** Both checks are pure functions taking their expectations as parameters,
+   with an inline `#[cfg(test)] mod tests` (eight tests: match, mismatch, case sensitivity, the
+   pinned constant's shape, and the four length cases). The diff was kept small because a
+   sibling unit (`transcript-accuracy`, session `darric-3f`) is generalising the downloader
+   into `ensure_file(url, filename)` in the same file; it had not landed when this shipped,
+   and the parameterised helpers are meant to be reused by it per file.
+4. **README.** Documents the source and why, the checksum, that a bad download is refused
+   rather than cached (with no automatic retry), and the manual-copy fallback.
 
 ### Candidate approaches considered
 
-- **A — GitHub Release asset + pinned checksum (chosen).** Reachable wherever the app is
-  installable; no new interface; one-time upload; the checksum makes the served bytes
-  self-validating.
-- **B — Configurable URL (env var or setting) defaulting to A.** Adds a public interface and a
-  settings surface for a third host nobody has today, in a file a sibling unit is refactoring.
-  Out of scope for this ask; it can be its own unit.
+- **A — GitHub Release asset + pinned checksum (chosen).**
+- **B — Configurable URL (env var or setting) defaulting to A.** Rejected: a public interface
+  and settings surface for a third host nobody has today, in a file a sibling unit is
+  refactoring.
 - **C — Ordered fallback: GitHub first, Hugging Face second.** Rejected: every machine that can
-  install the app can reach GitHub release assets, and a fallback that silently switches hosts
-  hides a network problem worth surfacing.
+  install the app can reach GitHub release assets, and a silent host switch hides a network
+  problem worth surfacing.
 - **D — Bundle the model in the DMG.** A 1.6 GB installer on every merge to main. Rejected.
 
 ## Success criteria
 
 - Ordering: the `models` release asset is live and verified (the next two criteria) **before**
   the code change is pushed for review. Once merged, every install downloads from the new URL,
-  so a PR whose asset is not yet live would break first launch for everyone.
+  so a PR whose asset is not yet live would break first launch for everyone. (Met: asset live
+  15:29Z, verified end to end 15:33Z, PR opened afterwards.)
 - `MODEL_URL` in `src-tauri/src/model.rs` is
   `https://github.com/honerlaw/darric/releases/download/models/ggml-large-v3-turbo.bin`, and
   `curl -sIL` of that URL ends in a 200 with `content-length: 1624555275`.
