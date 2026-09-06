@@ -96,8 +96,8 @@ install the app already reaches GitHub's release assets. The file is a byte-exac
 [`ggerganov/whisper.cpp`](https://huggingface.co/ggerganov/whisper.cpp)'s
 `ggml-large-v3-turbo.bin` (MIT), and the app checks the download's SHA-256 against
 `1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69` before using it, so a
-truncated or swapped download is refused and retried rather than cached. If neither host is
-reachable, copy the file from another machine into
+truncated or swapped download is refused rather than cached; the next Record press or launch
+downloads it again. If neither host is reachable, copy the file from another machine into
 `~/Library/Application Support/darric/ggml-large-v3-turbo.bin` and the app will use it as is.
 
 The download starts on its own as soon as the app opens, and a progress bar under the header

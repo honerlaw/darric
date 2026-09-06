@@ -12,6 +12,8 @@
 - [reviewed — clean] scope check: one unit, one PR, unphased (Skeptic accept). Noted: merge-order precondition (asset live before PR), sibling-branch sequencing, license provenance — all carried into the proposal text as criteria/notes; verified the HF model card declares `license: mit`.
 - [reviewed — clean] approach: A (GitHub Release asset + pinned SHA-256) over B configurable URL / C ordered fallback / D bundle in DMG (Skeptic accept). Folded as text corrections: release assets redirect to `release-assets.githubusercontent.com` (not objects.\*); digest check placed before rename; truncation check guarded on `total > 0`.
 - [reviewed — clean] whole-proposal soundness: accept. Folded as text: success-path log line naming the digest; the not-latest criterion now checks `isLatest` directly instead of list order.
+- [reviewed — clean] completion verification: Verifier accept on all 8 criteria, each reproduced independently (curl to the asset, release flags, HF etag, GitHub asset digest field, `cargo test`, diff grep for suppressions, e2e log read).
+- [decided] review triage: 7 findings from the local-diff code review (no PR yet) — 4 FIX / 0 SUGGEST / 3 IGNORE, none contested (solo gate). Minerva audit: no spec or knowledge findings.
 
 ## Work notes 2026-09-06
 
@@ -25,3 +27,14 @@ edit models --prerelease` fixed it; `releases/latest` is 404 again as before. Ca
 - E2E ran the debug binary under an isolated `HOME` (`default_model_path` and the DB both hang
   off `$HOME`), so the real app's cache and the sibling session's whisper tests were untouched.
   The MCP bind failed with port-busy (real app running) and the download proceeded anyway.
+
+## Review triage 2026-09-06
+
+- [FIXED] #1 low src-tauri/src/model.rs — length check also fired on over-length but said "truncated"; now names "longer than advertised" separately
+- [FIXED] #2 med src-tauri/src/model.rs — length check was inline behind network I/O and untested; extracted `check_length(total, downloaded)` with 4 tests
+- [FIXED] #3 low src-tauri/src/model.rs — no test pinned that uppercase hex is rejected (the compare relies on `{:x}`); added
+- [FIXED] #4 med src-tauri/src/model.rs — `verify_digest` read the module const; now `verify_digest(expected_hex, actual_hex)` so the sibling `ensure_file(url, filename)` refactor can reuse it per file
+- [IGNORED] #5 low README.md / model.rs — owner/repo and the hash literal live in three places with nothing checking agreement; the README copy is deliberate so someone placing the file by hand can verify it
+- [FIXED] #6 low README.md — "refused and retried" overstated; there is no automatic retry, the next Record press or launch re-downloads
+- [IGNORED] #7 low model.rs — new download failures surface as `AppError::Audio` ("audio error: …" in the UI); pre-existing convention for this module, not introduced here
+- Review fix: src-tauri/src/model.rs — `check_length` extracted and tested; `verify_digest` takes the expected hash; README retry wording corrected
