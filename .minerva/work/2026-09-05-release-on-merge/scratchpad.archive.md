@@ -25,3 +25,8 @@ DISSOLVED: the README's "every merge" claim was stronger than the implementation
 IGNORED: the macOS setup block (cmake / rust-toolchain / rust-cache / setup-node / npm ci) is now duplicated across four job definitions and could be a composite action. No failure scenario, and the refactor reaches `check.yml`, which is outside this diff.
 
 Verified by simulating the release script against a stubbed `gh` across all five states: zero DMGs, one DMG (expired artifact), two DMGs with no release, two DMGs re-running on its own release, and a tag owned by a different commit. Only the two-DMG cases proceed.
+
+## Balanced decisions 2026-09-05 (post-ship CI)
+
+- [escalated to user] arm64 CPU baseline: the first CI run failed on aarch64 because ggml's `-mcpu=native` compiled an i8mm intrinsic into a unit built without i8mm. A non-trivial build failure is a hardcoded escalation, and the fix was a real choice — switch to the known-green `macos-latest` runner (one line, but keeps `-mcpu=native`, so a binary built on an M2+ runner can SIGILL on an M1) versus force a portable baseline. User chose the portable baseline.
+- [decided] minimum macOS 14.4: the x64 leg failed separately on `std::filesystem` needing a 10.15 deployment target, because no `minimumSystemVersion` was ever declared and Tauri defaulted to 10.13. darric calls `AudioHardwareCreateProcessTap` (14.4+) unconditionally, so any lower declaration was already false and would install on systems where recording cannot work. Declaring the real minimum is dominant, not a coin flip — decided solo (solo gate).

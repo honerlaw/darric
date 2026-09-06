@@ -23,6 +23,8 @@ Every merge to `main` that can change the binary publishes a prerelease on the
 | `Darric_<version>_aarch64.dmg` | Apple Silicon |
 | `Darric_<version>_x64.dmg`     | Intel         |
 
+Both require **macOS 14.4 or later**.
+
 These builds are **unsigned** — there is no Apple Developer certificate behind them. macOS
 quarantines an unsigned app downloaded through a browser and reports **"Darric is damaged and
 can't be opened"**, which is the quarantine flag rather than a corrupt download. Right-click →
@@ -37,6 +39,7 @@ To build one yourself instead, see [Prerequisites](#prerequisites) and run `npm 
 
 ## Prerequisites
 
+- macOS 14.4 or later — darric records with Core Audio process taps (`AudioHardwareCreateProcessTap`), which do not exist before 14.4
 - [Node.js](https://nodejs.org/) (v18+) and npm
 - [Rust](https://rustup.rs/) (stable toolchain)
 - Xcode Command Line Tools: `xcode-select --install`
