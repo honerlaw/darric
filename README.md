@@ -6,12 +6,32 @@ Built with Tauri 2, Rust, React, and TypeScript.
 
 ## Features
 
-- Audio capture from the microphone
+- Audio capture from every input and output device at once, with per-device transcript
+  attribution
 - Local transcription via Whisper (runs on-device with Metal)
 - Recordings persist to SQLite — all data stays on your machine
 
-Multi-device capture (every input and output device at once, with per-device transcript
-attribution) is in progress; see `.minerva/work/2026-09-05-strip-to-recorder/proposal.md`.
+### How transcription works
+
+Audio from each device is cut into segments and each segment is transcribed on its own. Before
+a segment reaches Whisper it goes through a voice activity detector
+([Silero VAD](https://github.com/snakers4/silero-vad), MIT, in
+[ggml form](https://huggingface.co/ggml-org/whisper-vad)); only the parts it classifies as
+speech are decoded, and a segment with no speech at all — an output device with nothing
+playing, the quiet tail when you press Stop — produces no transcript line. Without this gate
+Whisper invents words for silence: eight seconds of nothing reliably comes back as "Thank you."
+The detector's model (885 KB) is bundled in the app and written to
+`~/Library/Application Support/darric/` on first use, so it never needs a download.
+
+Whisper decodes with beam search, and everything it says about one segment lands on one
+transcript line, so a line is roughly one utterance.
+
+A microphone that stops delivering audio mid-recording — unplugged, or a Continuity iPhone
+microphone that went out of range — is rebuilt with backoff for up to a minute and then given
+up on: its row reads `failed` for the rest of the recording, and the other devices carry on. An
+output device is tapped once when the recording starts; if that fails its row reads `failed` too.
+Either way, once the device is back it is captured again from the next recording, with no
+toggling needed.
 
 ## Query darric from Claude
 

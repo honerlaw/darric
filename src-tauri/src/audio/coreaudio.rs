@@ -218,7 +218,7 @@ pub fn input_stream_format(id: AudioObjectID) -> Result<(u32, u16)> {
 /// Anything not finite and positive returns 0, deliberately: 0 is rejected by
 /// every caller, whereas saturating a garbage value to `u32::MAX` would hand
 /// the resampler a 4-billion-hertz rate and produce convincing noise.
-fn exact_u32_from_f64(v: f64) -> u32 {
+pub fn exact_u32_from_f64(v: f64) -> u32 {
     if !v.is_finite() || v <= 0.0 {
         return 0;
     }

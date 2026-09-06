@@ -222,19 +222,14 @@ fn worker_loop(
 ) {
     while let Some(job) = shared.take() {
         match transcriber.transcribe(&job.samples) {
-            Ok(segments) => {
-                for seg in segments {
-                    if seg.text.is_empty() {
-                        continue;
-                    }
-                    sink(TranscribedLine {
-                        device_id: job.device_id.clone(),
-                        device_name: job.device_name.clone(),
-                        direction: job.direction,
-                        text: seg.text,
-                    });
-                }
-            }
+            Ok(Some(text)) => sink(TranscribedLine {
+                device_id: job.device_id,
+                device_name: job.device_name,
+                direction: job.direction,
+                text,
+            }),
+            // Silence, or too short to hold a word. Not a line, not an error.
+            Ok(None) => {}
             Err(e) => log::error!(
                 "[whisper] transcription failed for {}: {e}",
                 job.device_name

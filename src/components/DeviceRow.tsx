@@ -12,13 +12,23 @@ const STATE_TITLE: Record<DeviceState, string> = {
   starting: "Starting…",
   active: "Capturing",
   retrying: "Device unavailable — retrying",
-  failed: "Stopped",
+  failed: "Device unavailable — stopped retrying after a minute",
 };
+
+/**
+ * Only microphones are rebuilt with backoff; an output device is tapped once
+ * when the recording starts, so its failure has no retry story to tell.
+ */
+function stateTitle(d: CaptureDevice): string {
+  if (d.state === "failed" && d.direction === "output")
+    return "Could not capture this device's audio";
+  return STATE_TITLE[d.state];
+}
 
 function stateDot(state: DeviceState, enabled: boolean): string {
   if (!enabled) return "bg-ink-4";
   if (state === "active") return "bg-accent";
-  if (state === "retrying") return "bg-danger";
+  if (state === "retrying" || state === "failed") return "bg-danger";
   return "bg-ink-4";
 }
 
@@ -32,8 +42,9 @@ interface DeviceRowProps {
  *
  * Everything discovered is captured by default, so these switches are
  * exceptions rather than selections — which is also why a device that is
- * retrying is shown rather than hidden. A recording that silently lost a
- * microphone looks identical to one where nobody spoke.
+ * retrying, or that the recorder has given up on, is shown rather than hidden.
+ * A recording that silently lost a microphone looks identical to one where
+ * nobody spoke.
  */
 export function DeviceRow({ devices, onToggle }: DeviceRowProps): React.JSX.Element {
   if (devices.length === 0) {
@@ -67,7 +78,7 @@ export function DeviceRow({ devices, onToggle }: DeviceRowProps): React.JSX.Elem
             className={`h-[6px] w-[6px] shrink-0 rounded-full ${stateDot(d.state, d.enabled)} ${
               d.state === "retrying" ? "pulse-dot" : ""
             }`}
-            title={STATE_TITLE[d.state]}
+            title={stateTitle(d)}
           />
 
           <span
@@ -93,8 +104,8 @@ export function DeviceRow({ devices, onToggle }: DeviceRowProps): React.JSX.Elem
             />
           </div>
 
-          {d.state === "retrying" && (
-            <span className="shrink-0 font-mono text-[10px] text-danger">retrying</span>
+          {(d.state === "retrying" || d.state === "failed") && (
+            <span className="shrink-0 font-mono text-[10px] text-danger">{d.state}</span>
           )}
         </div>
       ))}
