@@ -52,3 +52,4 @@ app declares lives in the _app bundle's_ `Info.plist`.
 ## Related
 
 - [[2026-09-05-bug-forgetting-a-block-leaked-it-and-masked-a-use-after-free]] — the other phase-3 finding, also invisible to the test suite
+- [[2026-09-06-reference-a-test-binary-holds-the-audio-permission-of-its-terminal]] — contradicts

@@ -26,6 +26,7 @@
 - [[2026-09-05-bug-prettierignore-misses-generated-tauri-schemas]] — `.prettierignore` did not exclude the git-ignored `src-tauri/gen/` Tauri schemas, so `npm run format` failed locally for anyone who had run a build — while CI stayed green because it formats before those files exist
 - [[2026-09-05-bug-the-session-start-guard-is-check-then-act]] — `start_session` / `resume_session` check `engine.is_some()` at the top but install the engine only after the model load, so two commands could both pass and the second's engine silently replaced the first — whose threads and whisper workers then ran until the app quit
 - [[2026-09-06-bug-an-empty-page-with-no-cursor-restarts-the-poll-loop]] — `get_transcript` returned `next_cursor: null` on an empty page while telling the agent to pass `next_cursor` back, so a quiet poll restarted the transcript from line one; an empty page now echoes the caller's cursor
+- [[2026-09-06-bug-whisper-transcribes-silence-as-thank-you]] — 8 s of digital zeros through large-v3-turbo decodes to "Thank you." at token probability 0.75; fixed by a Silero VAD gate in front of whisper, not by whisper.cpp's thresholds
 
 ## Patterns
 
@@ -52,6 +53,7 @@
 - [[2026-09-06-constraint-make-latest-false-cannot-hide-the-only-full-release]] — GitHub's "latest" is the newest non-prerelease, so when every other release is a prerelease the one full release is latest regardless of `make_latest`
 - [[2026-09-06-constraint-tauri-setup-runs-outside-the-tokio-runtime]] — `tokio::net::TcpListener::from_std` panics in `setup()` because no runtime is entered there; bind a std listener synchronously and convert it inside the `tauri::async_runtime::spawn`ed future
 - [[2026-09-06-constraint-user-event-setup-replaces-navigator-clipboard]] — `@testing-library/user-event` installs its own clipboard on `setup()`, so a `writeText` mock from `beforeEach` is never called — spy on `navigator.clipboard.writeText` after `setup()` instead
+- [[2026-09-06-constraint-whisper-rs-state-api-never-applies-whisper-cpp-vad]] — `enable_vad` on `FullParams` does nothing through whisper-rs, because `whisper_full_with_state` skips VAD; run `WhisperVadContext` yourself and feed whisper the speech
 
 ## References
 
@@ -68,5 +70,7 @@
 - [[2026-09-05-reference-model-rs-download-paths-have-no-tests]] — `MODEL_URL` is a hard-coded `const`, so no Rust test can reach the status, mid-stream, rename, cleanup or serialisation paths; `model.rs` is the one module of seven with no test block
 - [[2026-09-05-reference-stop-session-releases-the-engine-before-teardown]] — `stop_session` `take()`s the engine out of `AppState` synchronously on entry and only then spawns the blocking teardown, so for the seconds that follow every engine-derived command reports "no recording" while capture threads, segmenters and whisper workers are still running
 - [[2026-09-05-reference-whisper-inference-serialises-on-one-metal-gpu]] — measured 1.14x speedup from 4x the threads against one shared `WhisperContext`, so pool size buys almost nothing and the queue's overflow policy is what protects a recording
+- [[2026-09-06-reference-a-test-binary-holds-the-audio-permission-of-its-terminal]] — TCC grants audio capture to the responsible process, so once the dev app tapped a device from a terminal, test binaries launched from that terminal tap it too
 - [[2026-09-06-reference-an-isolated-home-gives-a-clean-first-launch]] — `default_model_path` and the SQLite database both hang off `$HOME`, so `HOME=<scratch dir> target/debug/darric` runs the startup model download against an empty cache without touching the real one
 - [[2026-09-06-reference-rmcp-3-streamable-http-client-needs-reqwest-0-13]] — `StreamableHttpClient` is implemented only for reqwest 0.13's `Client`; the model downloader is on 0.12, so the protocol test uses a renamed `reqwest13` dev-dependency
+- [[2026-09-06-reference-say-hangs-under-cargo-test-unless-stdin-is-closed]] — `Command::new("say")` with inherited stdin hangs forever under the test harness; `.stdin(Stdio::null())` makes it return in a second

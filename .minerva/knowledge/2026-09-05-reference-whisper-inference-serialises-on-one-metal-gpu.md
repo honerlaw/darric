@@ -49,3 +49,4 @@ substantially larger model.
 
 - [[2026-09-05-decision-strip-darric-to-a-recorder]] — the unit that made multi-device capture the app's job
 - [[2026-09-05-reference-macos-13-is-retired-and-macos-15-intel-is-the-last-x86-64-image]] — see also
+- [[2026-09-06-constraint-whisper-rs-state-api-never-applies-whisper-cpp-vad]] — see also

@@ -42,3 +42,4 @@ taps and microphone on real devices.
 - [[2026-09-06-constraint-whisper-rs-state-api-never-applies-whisper-cpp-vad]] — why the gate is application code rather than a whisper.cpp flag
 - [[2026-09-05-decision-capture-engine-requires-a-transcriber]] — the transcriber the gate now lives inside
 - [[2026-09-05-bug-concurrent-model-downloads-share-one-tmp-file]] — why the bundled model is compared by bytes, not by presence
+- [[2026-09-06-reference-say-hangs-under-cargo-test-unless-stdin-is-closed]] — see also

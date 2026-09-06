@@ -54,3 +54,4 @@ reviewer verified the flush ordering _inside_ a block that never ran.
 - [[2026-09-05-pattern-verifying-a-sequence-says-nothing-about-whether-it-runs]] — the review failure the removed guard enabled
 - [[2026-09-05-bug-the-session-start-guard-is-check-then-act]] — see also
 - [[2026-09-05-reference-stop-session-releases-the-engine-before-teardown]] — see also
+- [[2026-09-06-bug-whisper-transcribes-silence-as-thank-you]] — see also
