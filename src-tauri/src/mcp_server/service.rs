@@ -162,9 +162,9 @@ impl DarricService {
     #[tool(
         description = "Read a recording's transcript as device-attributed lines, paged by a cursor. \
                        Each line has `seq`, `device_name`, `direction` (input = a microphone, output \
-                       = what the machine played), `content`, and `recorded_at`. Lines come in \
-                       transcription order, which can differ from speech order across devices — \
-                       sort by `recorded_at` if that matters. Pass `next_cursor` back as `after` \
+                       = what the machine played), `content`, and `recorded_at`, the time the line's audio was \
+                       captured. Pages come in transcription order, which across devices differs \
+                       from speech order — sort by `recorded_at` to interleave devices as spoken. Pass `next_cursor` back as `after` \
                        to fetch only what has landed since, including during a live recording; \
                        when nothing new has landed, `next_cursor` echoes the one you passed. \
                        Cursors are valid only while darric stays running; do not persist them."

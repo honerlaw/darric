@@ -19,6 +19,7 @@
 - [reviewed — clean] completion verification (phase 1, second pass): Verifier accept on criteria 1, 2 (as reworded), 3, 4, 8a; no regressions from the docs commits
 - [decided] review triage (phase 1): 7 FIX / 1 SUGGEST (already promoted) / 3 IGNORE, none contested (solo gate); no load-bearing divergence, no replan-vs-FIX
 - [decided] promote (phase 1, Mode B): four knowledge entries — VAD constraint, silence bug, tap-permission reference (contradicts the 2026-09-05 entry), say/stdin reference; Mode A deferred to the final phase; no TODOs cleared the deferral bar
+- [decided] ship + cleanup (phase 1): PR #49 merged (squash) after one CI lint fix; reconciliation owned by CI (knowledge-reconcile.yml, ran green, four entries catalogued on main); worktree teardown deferred — phase 2 outstanding; phase-2 branch cut from main
 
 ## Work notes 2026-09-06 (phase 1)
 
@@ -70,3 +71,33 @@ Mode: local-diff (fresh-context subagent; no PR yet). Findings 1–4 minerva aud
 - [FIXED] #11 low transcription/mod.rs — join and floor logic only reachable through the model → `join_pieces` / `too_short` extracted, three unit tests.
 
 Review fixes: source.rs — `supervise` refactor, `STABLE_AFTER`; vad.rs — `WRITE_LOCK`; mod.rs — `join_pieces`, `too_short`, `fixture::silent_cases`; lib.rs — whisper log hooks; DeviceRow.tsx — `stateTitle`; README — taps tried once.
+
+## Work notes 2026-09-06 (phase 2)
+
+- `MIN_SEGMENT` is 2 s, not the 3 s the Approach text said: success criterion 5's stream
+  (2 s speech, 0.6 s pause) cannot produce two segments under a 3 s minimum, and the criterion
+  is the contract. A remark shorter than the minimum waits until 2 s are buffered and then
+  leaves on the next pause, so latency is bounded at ~2.4 s.
+- The noise floor also creeps up 0.2 %/frame during frames classified as speech (capped at the
+  frame's own level). Without it, steady room noise louder than 4× the initial floor reads as
+  speech forever and pauses are never seen; with it, such noise is reclassified within about
+  half a minute while a ten-second utterance moves the floor by ~2 %.
+- Leading silence is trimmed to one pause's worth, in whole frames, so a long silence neither
+  fills the buffer nor mis-aligns the 20 ms frame grid. The first cut of the pause test came out
+  one frame short until the trim was frame-aligned.
+- Resampler: 64 taps, not 32. A 32-tap Blackman sinc has a ~8 kHz transition band at 48 kHz,
+  which leaves a 12 kHz tone well above the 40 dB floor criterion 7 asks for; 64 taps measures
+  under it. Cutoff 0.9 × the lower Nyquist. Every position stays integer; the ratio enters as
+  gcd-reduced `u16`s.
+- `recorded_at` is now the segment's capture start. `db::sessions::transcript_lines` already
+  orders by it, so the on-screen transcript interleaves devices in speech order for free.
+- Pipeline test (segmenter → VAD → whisper on the `say` fixture spoken twice with silence
+  around): the segmenter cut each pass at the natural pause between its two sentences, giving
+  four whole-sentence lines stamped in order and a 410 ms tail that produced nothing.
+- `say` hung once more even with stdin closed, while returning in a second from a shell. The
+  fixture generator now polls the child and kills it after 30 s, retrying once, and the fixture
+  is synthesized once per test process. The phase-1 knowledge entry's "stdin null fixes it" is
+  necessary but not sufficient; the bound is the real protection.
+- VAD `speech_pad_ms` raised from whisper.cpp's 30 to 100: one room-microphone run came back
+  "Quarterly numbers…" without "The"; the next run at 30 ms was verbatim, so the loss is
+  acoustic variance, and the extra 140 ms per region is cheap insurance.

@@ -248,6 +248,9 @@ where
     F: Fn(&[f32]) + Send + Sync + 'static,
 {
     let running_for_cb = Arc::clone(running);
+    // Blocks are `Fn`, and the filter is stateful, so it sits behind a mutex.
+    // Core Audio invokes an IOProc serially, so the lock is never contended.
+    let resampler = std::sync::Mutex::new(resample::Resampler::new(rate, channels));
     let block = RcBlock::new(
         move |_now: NonNull<AudioTimeStamp>,
               input: NonNull<AudioBufferList>,
@@ -266,7 +269,10 @@ where
                 let list = unsafe { input.as_ref() };
                 let raw = interleaved_f32(list);
                 if !raw.is_empty() {
-                    let samples = resample::to_16k_mono(&raw, channels, rate);
+                    let samples = resampler
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner)
+                        .process(&raw);
                     if !samples.is_empty() {
                         on_samples(&samples);
                     }

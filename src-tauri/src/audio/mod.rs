@@ -18,7 +18,7 @@ use crate::state::DbConn;
 use crate::transcription::pool::{SegmentJob, TranscribedLine, TranscriptionPool};
 use crate::transcription::Transcriber;
 use device::{CaptureDevice, ExclusionRegistry};
-use segmenter::Segmenter;
+use segmenter::{Segment, Segmenter};
 use source::{SharedStatus, SourceState, SourceStatus};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -247,13 +247,13 @@ impl CaptureEngine {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .flush();
-            if let Some(samples) = tail {
+            if let Some(segment) = tail {
                 log::info!(
                     "[audio] flushing {} trailing samples for {}",
-                    samples.len(),
+                    segment.samples.len(),
                     dev.name
                 );
-                self.pool.submit(job(dev, samples));
+                self.pool.submit(job(dev, segment));
             }
         }
 
@@ -265,17 +265,26 @@ impl CaptureEngine {
     }
 }
 
-fn job(device: &CaptureDevice, samples: Vec<f32>) -> SegmentJob {
+fn job(device: &CaptureDevice, segment: Segment) -> SegmentJob {
     SegmentJob {
         device_id: device.id.clone(),
         device_name: device.name.clone(),
         direction: device.direction,
-        samples,
+        samples: segment.samples,
+        captured_at: segment.captured_at,
     }
 }
 
+/// The `recorded_at` a line is stored and emitted with: when its audio was
+/// captured, not when whisper finished with it. Transcription runs seconds
+/// behind capture and finishes in a different order across devices, so the
+/// capture time is what puts two devices' lines back into speech order.
+fn recorded_at(line: &TranscribedLine) -> String {
+    line.captured_at.to_rfc3339()
+}
+
 fn persist_and_emit(db: &Arc<DbConn>, app: &AppHandle, session_id: &str, line: &TranscribedLine) {
-    let now = chrono::Utc::now().to_rfc3339();
+    let now = recorded_at(line);
     let id = uuid::Uuid::new_v4().to_string();
     {
         let conn =
@@ -298,7 +307,7 @@ fn persist_and_emit(db: &Arc<DbConn>, app: &AppHandle, session_id: &str, line: &
             log::error!("[audio] failed to persist transcript line: {e}");
         }
     }
-    app.emit("transcript_chunk", chunk_payload(session_id, line, &now))
+    app.emit("transcript_chunk", chunk_payload(session_id, line))
         .ok();
 }
 
@@ -311,14 +320,14 @@ fn persist_and_emit(db: &Arc<DbConn>, app: &AppHandle, session_id: &str, line: &
 /// chunk for the session that just stopped from one for the session now on
 /// screen. Dropping the field does not fail loudly — the frontend's filter would
 /// match nothing and silently stop appending every live line.
-fn chunk_payload(session_id: &str, line: &TranscribedLine, now: &str) -> serde_json::Value {
+fn chunk_payload(session_id: &str, line: &TranscribedLine) -> serde_json::Value {
     serde_json::json!({
         "session_id": session_id,
         "device_id": line.device_id,
         "device_name": line.device_name,
         "direction": line.direction.as_str(),
         "content": line.text,
-        "recorded_at": now,
+        "recorded_at": recorded_at(line),
     })
 }
 
@@ -486,7 +495,21 @@ mod tests {
             device_name: "MacBook Microphone".to_string(),
             direction: Direction::Input,
             text: "hello there".to_string(),
+            captured_at: chrono::DateTime::parse_from_rfc3339("2024-01-01T09:00:05+00:00")
+                .expect("fixed timestamp")
+                .with_timezone(&chrono::Utc),
         }
+    }
+
+    #[test]
+    fn recorded_at_is_the_capture_time_not_now() {
+        // A line reaches the sink seconds after its audio was heard, and two
+        // devices' lines arrive in whichever order whisper finished them.
+        // Ordering by recorded_at only restores speech order if it is the
+        // capture time.
+        let stamp = recorded_at(&line());
+        assert_eq!(stamp, "2024-01-01T09:00:05+00:00");
+        assert_eq!(chunk_payload("s", &line())["recorded_at"], stamp);
     }
 
     #[test]
@@ -494,7 +517,7 @@ mod tests {
         // The frontend drops any chunk whose session_id does not match the
         // session on screen. Without this field every live line is filtered out
         // and the transcript silently stops updating - no error anywhere.
-        let payload = chunk_payload("session-42", &line(), "2024-01-01T09:00:05Z");
+        let payload = chunk_payload("session-42", &line());
 
         assert_eq!(payload["session_id"], "session-42");
     }
@@ -503,12 +526,12 @@ mod tests {
     fn chunk_payload_carries_the_fields_the_frontend_reads() {
         // TranscriptChunk in src/types/index.ts. A renamed or dropped key here
         // reaches the UI as undefined rather than as a build failure.
-        let payload = chunk_payload("session-42", &line(), "2024-01-01T09:00:05Z");
+        let payload = chunk_payload("session-42", &line());
 
         assert_eq!(payload["device_id"], "dev-1");
         assert_eq!(payload["device_name"], "MacBook Microphone");
         assert_eq!(payload["direction"], "input");
         assert_eq!(payload["content"], "hello there");
-        assert_eq!(payload["recorded_at"], "2024-01-01T09:00:05Z");
+        assert_eq!(payload["recorded_at"], "2024-01-01T09:00:05+00:00");
     }
 }

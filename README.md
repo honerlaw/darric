@@ -13,8 +13,12 @@ Built with Tauri 2, Rust, React, and TypeScript.
 
 ### How transcription works
 
-Audio from each device is cut into segments and each segment is transcribed on its own. Before
-a segment reaches Whisper it goes through a voice activity detector
+Audio from each device is resampled to 16 kHz through a band-limited filter (a linear resampler
+used to fold everything above 8 kHz down into the speech band) and cut into segments at pauses
+in speech: a segment ends after 400 ms of quiet once it holds at least two seconds, and at
+25 seconds regardless, so Whisper gets whole utterances rather than fixed eight-second slices.
+Each segment is transcribed on its own. Before a segment reaches Whisper it goes through a voice
+activity detector
 ([Silero VAD](https://github.com/snakers4/silero-vad), MIT, in
 [ggml form](https://huggingface.co/ggml-org/whisper-vad)); only the parts it classifies as
 speech are decoded, and a segment with no speech at all — an output device with nothing
@@ -24,7 +28,9 @@ The detector's model (885 KB) is bundled in the app and written to
 `~/Library/Application Support/darric/` on first use, so it never needs a download.
 
 Whisper decodes with beam search, and everything it says about one segment lands on one
-transcript line, so a line is roughly one utterance.
+transcript line, so a line is roughly one utterance. A line's `recorded_at` is the time its
+audio was captured, not the time Whisper finished with it, so sorting by it puts two devices'
+lines back into the order they were spoken.
 
 A microphone that stops delivering audio mid-recording — unplugged, or a Continuity iPhone
 microphone that went out of range — is rebuilt with backoff for up to a minute and then given
@@ -55,8 +61,9 @@ any account on this Mac can reach it, not just yours. If the chip reads `port bu
 process holds port 27842; quit it and relaunch darric. If it reads `off`, hover it for the
 reason.
 
-Search is case-insensitive for ASCII letters only, and transcript lines come back in the order
-they were transcribed, which across two devices can differ from the order they were spoken.
+Search is case-insensitive for ASCII letters only. Transcript pages come back in the order
+lines were transcribed, which across two devices can differ from the order they were spoken;
+each line's `recorded_at` is its capture time, so sort by it to interleave devices as spoken.
 
 ## Downloads
 

@@ -177,10 +177,16 @@ pub mod fixture {
 
     /// About nine seconds of real speech at 16 kHz, synthesized with macOS
     /// `say` and converted with `afconvert` — both ship with the only platform
-    /// darric builds for, so no audio file is committed.
+    /// darric builds for, so no audio file is committed. Synthesized once per
+    /// test process and shared.
     pub fn spoken() -> Vec<f32> {
-        let (_dir, wav) = spoken_wav();
-        wav_data_f32(&std::fs::read(&wav).expect("read wav"))
+        static SAMPLES: std::sync::OnceLock<Vec<f32>> = std::sync::OnceLock::new();
+        SAMPLES
+            .get_or_init(|| {
+                let (_dir, wav) = spoken_wav();
+                wav_data_f32(&std::fs::read(&wav).expect("read wav"))
+            })
+            .clone()
     }
 
     /// The same speech as a 16 kHz float WAV on disk, for playing through a
@@ -190,27 +196,51 @@ pub mod fixture {
         let dir = tempfile::tempdir().expect("tempdir");
         let aiff = dir.path().join("speech.aiff");
         let wav = dir.path().join("speech.wav");
-        // stdin is closed explicitly: under the test harness `say` otherwise
-        // waits on the inherited descriptor and never returns.
-        let ok = std::process::Command::new("say")
-            .args(["-o"])
-            .arg(&aiff)
-            .arg(SPOKEN)
-            .stdin(std::process::Stdio::null())
-            .status()
-            .expect("run `say`")
-            .success();
-        assert!(ok, "`say` failed");
-        let ok = std::process::Command::new("afconvert")
-            .args(["-f", "WAVE", "-d", "LEF32@16000", "-c", "1"])
-            .arg(&aiff)
-            .arg(&wav)
-            .stdin(std::process::Stdio::null())
-            .status()
-            .expect("run `afconvert`")
-            .success();
-        assert!(ok, "`afconvert` failed");
+        run_bounded("say", |c| c.arg("-o").arg(&aiff).arg(SPOKEN));
+        run_bounded("afconvert", |c| {
+            c.args(["-f", "WAVE", "-d", "LEF32@16000", "-c", "1"])
+                .arg(&aiff)
+                .arg(&wav)
+        });
         (dir, wav)
+    }
+
+    /// Run a macOS audio tool with stdin closed and a hard time limit.
+    ///
+    /// `say` has been seen to sit forever under the test harness — once with
+    /// inherited stdin, once with it closed — while it returns in a second from
+    /// a shell. A hung fixture must fail the test, not stall the run, so the
+    /// child is polled and killed after [`TOOL_TIMEOUT`], and retried once.
+    fn run_bounded(
+        tool: &str,
+        configure: impl Fn(&mut std::process::Command) -> &mut std::process::Command,
+    ) {
+        const TOOL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+        for attempt in 1..=2 {
+            let mut cmd = std::process::Command::new(tool);
+            configure(&mut cmd);
+            let mut child = cmd
+                .stdin(std::process::Stdio::null())
+                .spawn()
+                .unwrap_or_else(|e| panic!("spawn `{tool}`: {e}"));
+            let started = std::time::Instant::now();
+            loop {
+                match child.try_wait().expect("poll child") {
+                    Some(status) => {
+                        assert!(status.success(), "`{tool}` failed: {status}");
+                        return;
+                    }
+                    None if started.elapsed() > TOOL_TIMEOUT => {
+                        child.kill().ok();
+                        child.wait().ok();
+                        eprintln!("`{tool}` hung for {TOOL_TIMEOUT:?} (attempt {attempt}); killed");
+                        break;
+                    }
+                    None => std::thread::sleep(std::time::Duration::from_millis(50)),
+                }
+            }
+        }
+        panic!("`{tool}` hung twice");
     }
 
     /// The `data` chunk of a 32-bit float WAV as samples.
@@ -324,6 +354,71 @@ mod accuracy {
                 "{label} must contain {EXPECTED_PHRASE:?}, got {line:?}"
             );
         }
+    }
+}
+
+/// The whole pipeline below the capture callback on real speech: the pause
+/// segmenter, then the VAD gate, then whisper. Two spoken sentences separated by
+/// silence must come out as two lines, each with its own words, stamped in
+/// order.
+#[cfg(test)]
+mod pipeline {
+    use super::fixture::{model_path, spoken, EXPECTED_PHRASE};
+    use super::*;
+    use crate::audio::segmenter::Segmenter;
+
+    #[test]
+    #[ignore = "requires the downloaded whisper model and macOS speech synthesis"]
+    fn two_utterances_become_two_lines_in_order() {
+        let Some(path) = model_path() else {
+            println!("no model present — skipping");
+            return;
+        };
+        let t = Transcriber::new(path.to_str().expect("utf-8 path")).expect("load models");
+        let speech = spoken();
+
+        // 2 s silence, the sentence, 1 s silence, the sentence again, 2 s silence.
+        let mut stream = vec![0.0_f32; 32_000];
+        stream.extend_from_slice(&speech);
+        stream.extend(std::iter::repeat_n(0.0_f32, 16_000));
+        stream.extend_from_slice(&speech);
+        stream.extend(std::iter::repeat_n(0.0_f32, 32_000));
+
+        let mut seg = Segmenter::new();
+        let mut segments = Vec::new();
+        for chunk in stream.chunks(160) {
+            segments.extend(seg.push(chunk));
+        }
+        segments.extend(seg.flush());
+
+        let mut lines = Vec::new();
+        for s in &segments {
+            let line = t.transcribe(&s.samples).expect("transcribe");
+            println!(
+                "{} ms at {} -> {line:?}",
+                s.samples.len() * 1_000 / 16_000,
+                s.captured_at.format("%H:%M:%S%.3f")
+            );
+            if let Some(text) = line {
+                lines.push((s.captured_at, text));
+            }
+        }
+        // The fixture has a natural pause between its two sentences, so each
+        // spoken pass may come out as one line or two; either way the phrase
+        // from its first sentence appears once per pass and no line is a
+        // fragment.
+        let with_phrase = lines
+            .iter()
+            .filter(|(_, text)| text.to_lowercase().contains(EXPECTED_PHRASE))
+            .count();
+        assert_eq!(with_phrase, 2, "the sentence was spoken twice: {lines:?}");
+        assert!(lines
+            .iter()
+            .all(|(_, text)| text.split_whitespace().count() >= 4));
+        assert!(
+            lines.windows(2).all(|w| w[0].0 < w[1].0),
+            "stamped in order"
+        );
     }
 }
 
