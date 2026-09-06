@@ -77,10 +77,19 @@ lines in the same millisecond, and it is race-free where `recorded_at` is not: a
 `Utc::now()` before taking the lock, so two lines can be timestamped in one order and inserted in
 the other.
 
-`transcript_lines` has a `TEXT PRIMARY KEY`, so its rowid is implicit and would be renumbered by
-`VACUUM`. Nothing in darric runs `VACUUM` today. Adding one would invalidate every cursor an
-agent holds; if that ever becomes necessary the cursor must move to an explicit
+`transcript_lines` has a `TEXT PRIMARY KEY`, so its rowid is implicit and is reassigned whenever
+the table is rebuilt: by `VACUUM`, which nothing in darric runs, and by a create-copy-drop-rename
+migration, which migration 010 already is and which any future `CHECK` change would be again. A
+cursor is therefore valid only for the life of the app process: a rebuild happens during
+`db::open` at startup, and a restart drops every MCP session anyway, so no live cursor survives
+into a renumbered table. The tool description states that a cursor must not be persisted across
+darric restarts. If cursors ever need to outlive a restart, they must move to an explicit
 `INTEGER` column first.
+
+Rowid order is insertion order, which is transcription-completion order, not speech order: with
+two devices in one session, whichever whisper worker finishes first lands first. Each line
+carries `recorded_at` so a caller can re-sort by capture time, and the `get_transcript`
+description says so.
 
 ### Server module
 
@@ -89,9 +98,12 @@ agent holds; if that ever becomes necessary the cursor must move to an explicit
   task via a `CancellationToken`.
 - `src-tauri/src/mcp_server/service.rs` — `DarricService` holding the read-only connection, an
   `Arc<dyn LiveStatus>`, and the `ToolRouter`.
-- `LiveStatus` is a trait with one method returning the recorder snapshot. Production implements
-  it on a struct holding the Tauri `AppHandle`, reading `AppState.engine` under a short lock.
-  Tests pass a stub, because `AppHandle` cannot be constructed in one.
+- `LiveStatus` is a trait with one method returning the recorder snapshot: whether an engine is
+  installed, its session id, the per-device statuses, and the dropped-segment count. Production
+  implements it on a struct holding the Tauri `AppHandle`, reading `AppState.engine` under a
+  short lock. The `status` tool then fills in the live session's `topic` and `started_at` from
+  its own read-only connection, since `CaptureEngine` exposes only the session id. Tests pass a
+  stub, because `AppHandle` cannot be constructed in one.
 
 ### Tools
 
@@ -146,9 +158,13 @@ webview, and the chip reads "Copied" for two seconds. When bind failed it reads
   second hand-maintained `include_str!` list, so a new migration cannot leave the helper behind.
 - One protocol round-trip test in `mcp_server` using rmcp's client under `[dev-dependencies]`
   (features `client`, `transport-streamable-http-client-reqwest`): spawn on port 0 against a
-  temp-file database seeded with one session and three lines, plus a stub `LiveStatus`;
-  initialize; assert the tool list is exactly `status`, `list_sessions`, `get_transcript`,
-  `search`; call `list_sessions` and `get_transcript` and check the seeded rows come back.
+  temp-file database seeded through a separate writer connection with one session and three
+  lines, plus a stub `LiveStatus`; initialize; assert the tool list is exactly `status`,
+  `list_sessions`, `get_transcript`, `search`; call `list_sessions` and `get_transcript` and
+  check the seeded rows come back. Then, with the server still running, insert a fourth line
+  through the writer connection and call `get_transcript` with the returned `next_cursor`,
+  asserting exactly that line comes back. This is the read-only-handle-sees-concurrent-WAL-commits
+  assumption that the live-meeting criterion rests on, exercised rather than assumed.
 
 ### Docs
 
