@@ -35,3 +35,4 @@ regardless. A 1.55 GB download from the GitHub release took about 90 s.
 - [[2026-09-06-decision-whisper-model-served-from-the-models-github-release]] — the download this technique verified
 - [[2026-09-05-constraint-tauri-events-from-setup-reach-no-webview]] — why the log, not a UI event, is the observable here
 - [[2026-09-05-reference-model-rs-download-paths-have-no-tests]] — the network paths this exercises are the ones no unit test reaches
+- [[2026-09-06-bug-webpki-only-roots-rejected-zscaler-tls-inspection]] — see also
