@@ -41,3 +41,5 @@ json_result(&value)
 
 - [[2026-05-19-decision-rmcp-as-mcp-sdk]] — handler asyncness comes from rmcp's `#[tool]` macro
 - [[2026-05-19-decision-inline-tests-for-mcp-queries]] — the sync query layer offloaded here is the one tested inline
+- [[2026-09-06-decision-mcp-server-reads-through-its-own-read-only-connection]] — see also
+- [[2026-09-06-decision-mcp-server-rebuilt-in-process-on-rmcp-3]] — see also

@@ -33,3 +33,4 @@ Depend on `rmcp = "1.7"` with features `server, macros, transport-streamable-htt
 
 - [[2026-05-19-decision-tool-handler-router-pattern]] — the macro system this pins is what forces the explicit router form
 - [[2026-05-19-decision-spawn-blocking-for-rusqlite-tools]] — rmcp's `#[tool]` macro is what makes every handler an `async fn`
+- [[2026-09-06-decision-mcp-server-rebuilt-in-process-on-rmcp-3]] — see also
