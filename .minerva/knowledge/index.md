@@ -7,6 +7,7 @@
 - [[2026-05-19-decision-spawn-blocking-for-rusqlite-tools]] — every MCP tool handler dispatches its rusqlite query through `tokio::task::spawn_blocking` — don't strip it, it prevents runtime stalls and satisfies `unused_async`
 - [[2026-05-19-decision-tool-handler-router-pattern]] — use `#[tool_handler(router = self.tool_router)]`, never the bare form — the bare form leaves the field dead and needs an `#[allow]` this repo forbids
 - [[2026-09-05-decision-capture-engine-requires-a-transcriber]] — the optional transcriber let two separate bugs present as a normal recording that transcribed nothing, so the parameter is now required and callers that cannot obtain one must fail
+- [[2026-09-05-decision-nvmrc-is-the-single-node-version-source]] — both workflows use `node-version-file: .nvmrc` rather than a `node-version:` literal, so bumping Node is a one-line edit — do not "simplify" a workflow back to a hardcoded version
 - [[2026-09-05-decision-strip-darric-to-a-recorder]] — darric is now only a recorder — the AI chat, MCP client, MCP server, notes, tasks, tags, search and board features were deleted outright, retiring the four MCP decisions with them
 
 ## Bugs
