@@ -14,6 +14,7 @@
 - [reviewed — clean] whole-proposal soundness: accept. Folded as text: success-path log line naming the digest; the not-latest criterion now checks `isLatest` directly instead of list order.
 - [reviewed — clean] completion verification: Verifier accept on all 8 criteria, each reproduced independently (curl to the asset, release flags, HF etag, GitHub asset digest field, `cargo test`, diff grep for suppressions, e2e log read).
 - [decided] review triage: 7 findings from the local-diff code review (no PR yet) — 4 FIX / 0 SUGGEST / 3 IGNORE, none contested (solo gate). Minerva audit: no spec or knowledge findings.
+- [decided] promote partition: 3 PROMOTE (decision: model served from the `models` release; constraint: `--latest=false` cannot hide the only full release; reference: isolated `HOME` first-launch technique), review-fix summaries and release facts MERGED into proposal, decisions/triage blocks DISCARDED, 0 TODO, no issue closed (#16 stays open — cached-file validation untouched) (solo gate)
 
 ## Work notes 2026-09-06
 
