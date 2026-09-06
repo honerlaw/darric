@@ -52,3 +52,5 @@ degraded mode still fails closed.
 
 - [[2026-09-05-pattern-auto-merge-on-a-pr-that-can-carry-no-checks]] — the other scoping error found in the same review
 - [[2026-09-05-reference-github-token-actions-trigger-no-workflows]] — why this job has to carry its own gate at all
+- [[2026-09-05-constraint-a-concurrency-group-queues-one-run-and-evicts-the-rest]] — see also
+- [[2026-09-05-reference-actions-download-artifact-warns-where-upload-errors]] — see also
