@@ -37,3 +37,5 @@ mutation-checked. The gap is entirely on the Rust side.
 ## Related
 
 - [[2026-09-05-bug-concurrent-model-downloads-share-one-tmp-file]] — the fix living in this untested module
+- [[2026-09-06-decision-whisper-model-served-from-the-models-github-release]] — see also
+- [[2026-09-06-reference-an-isolated-home-gives-a-clean-first-launch]] — see also

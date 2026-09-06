@@ -49,3 +49,4 @@ handles the mount gap.
 - [[2026-09-05-bug-concurrent-model-downloads-share-one-tmp-file]] — the race this delivery gap left unguarded
 - [[2026-09-06-constraint-tauri-setup-runs-outside-the-tokio-runtime]] — see also
 - [[2026-09-06-decision-mcp-server-rebuilt-in-process-on-rmcp-3]] — see also
+- [[2026-09-06-reference-an-isolated-home-gives-a-clean-first-launch]] — see also
