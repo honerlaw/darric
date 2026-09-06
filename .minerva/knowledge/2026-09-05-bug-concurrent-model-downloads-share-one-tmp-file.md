@@ -59,3 +59,4 @@ finished rather than starting its own.
 - [[2026-09-05-bug-arc-try-unwrap-after-sharing-fails-silently]] — another failure in this codebase that produced a plausible result instead of an error
 - [[2026-09-05-bug-a-losing-rename-became-a-silent-none-transcriber]] — see also
 - [[2026-09-05-reference-model-rs-download-paths-have-no-tests]] — see also
+- [[2026-09-06-decision-whisper-model-served-from-the-models-github-release]] — see also
