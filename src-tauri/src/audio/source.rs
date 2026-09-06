@@ -251,12 +251,15 @@ where
 
     let status_for_cb = Arc::clone(status);
     let failed_for_cb = Arc::clone(stream_failed);
+    // One filter per stream: it carries the last taps of input across
+    // callbacks so buffer boundaries are invisible to it.
+    let mut resampler = resample::Resampler::new(sample_rate, channels);
 
     let stream = target
         .build_input_stream(
             &supported.into(),
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                let samples = resample::to_16k_mono(data, channels, sample_rate);
+                let samples = resampler.process(data);
                 if let Ok(mut s) = status_for_cb.try_lock() {
                     s.level = resample::rms(&samples);
                 }

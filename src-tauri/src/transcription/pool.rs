@@ -16,6 +16,7 @@
 //! unannounced hole in it is worse than one that says it has a hole.
 
 use super::Transcriber;
+use chrono::{DateTime, Utc};
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
@@ -53,6 +54,8 @@ pub struct SegmentJob {
     pub device_name: String,
     pub direction: Direction,
     pub samples: Vec<f32>,
+    /// When the segment's first sample was captured.
+    pub captured_at: DateTime<Utc>,
 }
 
 /// A transcribed line, ready to persist and emit.
@@ -61,6 +64,8 @@ pub struct TranscribedLine {
     pub device_name: String,
     pub direction: Direction,
     pub text: String,
+    /// When the audio behind `text` was captured — the line's `recorded_at`.
+    pub captured_at: DateTime<Utc>,
 }
 
 /// Where transcribed lines go — persisted and emitted by the engine.
@@ -227,6 +232,7 @@ fn worker_loop(
                 device_name: job.device_name,
                 direction: job.direction,
                 text,
+                captured_at: job.captured_at,
             }),
             // Silence, or too short to hold a word. Not a line, not an error.
             Ok(None) => {}
@@ -248,6 +254,7 @@ mod tests {
             device_name: name.to_string(),
             direction: Direction::Input,
             samples: vec![0.0; 8],
+            captured_at: Utc::now(),
         }
     }
 

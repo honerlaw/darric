@@ -153,9 +153,10 @@ pub fn transcript_lines(
 ///
 /// Rowid order is insertion order — which is transcription-completion order,
 /// not speech order, when two devices' whisper workers finish at different
-/// times. It is chosen anyway because it is exact: `recorded_at` is stamped
-/// before the insert lock is taken, so two lines can be timestamped in one
-/// order and inserted in the other, and a timestamp cursor would skip one.
+/// times. It is chosen anyway because it is exact: `recorded_at` is the time
+/// the line's audio was captured, seconds before whisper finished with it, so
+/// lines are routinely inserted out of timestamp order and a timestamp cursor
+/// would skip one. Callers sort by `recorded_at` for speech order.
 ///
 /// `transcript_lines` has a `TEXT` primary key, so its rowid is implicit and is
 /// reassigned when the table is rebuilt: by `VACUUM`, which nothing here runs,

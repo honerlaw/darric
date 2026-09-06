@@ -1,7 +1,7 @@
 # Proposal: transcript-accuracy
 
 **Date**: 2026-09-06
-**Status**: Draft
+**Status**: Shipped (2026-09-06)
 
 ## Goal
 
@@ -44,171 +44,89 @@ The user's stated priority is accuracy over speed.
 
 ## Approach
 
-Phase 1 fixes the reported symptoms (1, 4, 5); phase 2 is the accuracy work (2, 3, 6).
+What shipped, in two PRs. Phase 1 (#49, merged 2026-09-06) is the silence gate and the capture
+give-up; phase 2 is the segmentation, timestamps and resampler.
 
-Feeding each device's previous line to whisper as an `initial_prompt` was designed and then
-dropped at the user's decision: a garbled line would prime every following segment during
-continuous speech, whisper's known repetition failure, and the pause-based segments already
-hand whisper whole utterances. Each segment is decoded without cross-segment context.
+### Transcription gate (phase 1)
 
-### whisper-rs 0.14 → 0.16
+whisper-rs 0.14 → 0.16. whisper.cpp's integrated VAD only runs in `whisper_full`, which
+whisper-rs never calls, so `transcription::vad::Gate` runs the Silero VAD itself: inputs
+under 0.5 s are dropped, `segments_from_samples` (whisper.cpp defaults, speech padding 100 ms)
+finds the speech regions, and a segment with none returns no line without touching the
+encoder; otherwise the regions are concatenated with 100 ms gaps, as `whisper_full` does, and
+decoded with `BeamSearch { beam_size: 5 }`. Whisper's sub-segments are joined into one line per
+audio segment. `no_speech_probability()` read 0.00 for everything in this build and is not
+used. See [[2026-09-06-constraint-whisper-rs-state-api-never-applies-whisper-cpp-vad]] and
+[[2026-09-06-bug-whisper-transcribes-silence-as-thank-you]].
 
-`whisper-rs = "0.16"` (sys 0.15, a whisper.cpp with VAD support). The state API changed:
-`full_n_segments()` returns a count, segments come from `state.get_segment(i)` as a
-`WhisperSegment` with `to_str_lossy()`, `no_speech_probability()`, and per-token probabilities.
-`Transcriber::transcribe` is rewritten against that API; nothing else in the crate touches
-whisper-rs.
+The 885 KB Silero model is committed at `src-tauri/models/ggml-silero-v5.1.2.bin`, embedded
+with `include_bytes!`, and written to `model::model_dir()` on first use, compared byte-for-byte
+and written through a `.tmp` + rename under a process-wide lock. No download.
 
-### Silero VAD, bundled
+Prompt carry-over between segments was designed and dropped at the user's decision: a garbled
+line would prime every following segment during continuous speech.
 
-`src-tauri/models/ggml-silero-v5.1.2.bin` (885 KB, MIT) is committed and `include_bytes!`'d.
-On `Transcriber::new` the file in the model directory (`model::model_dir()`, extracted from
-`default_model_path`) is read and compared byte-for-byte with the embedded copy; if absent or
-different it is rewritten through a `.tmp` + rename, and the path is kept on the `Transcriber`.
-A full comparison rather than a length check because `exists()`-style validity is exactly what
-[[2026-09-05-bug-concurrent-model-downloads-share-one-tmp-file]] warns about, and 885 KB is
-cheap to read. `Transcriber::new` is reached only through `loader::get_or_load`'s single flight
-(the other caller is the ignored bench), so two writers cannot race; a comment on
-`Transcriber::new` states that dependency. No download: huggingface.co is blocked on the user's
-work network. A sibling session is moving the whisper model itself to a GitHub Release asset
-for the same reason; riding that path was considered and rejected for a sub-megabyte file that
-can simply live in the repo, and the two are not the same mechanism by design — the whisper
-model is 1.6 GB and must be fetched, the VAD model is 885 KB and need not be.
+### Capture give-up (phase 1)
 
-### Transcription gate
+`source::supervise` is the rebuild loop with the stream builder injected, so it is tested in
+CI in milliseconds. A failure streak longer than `GIVE_UP_AFTER` (60 s) ends the loop with
+`Failed`; a rebuilt stream must stay up `STABLE_AFTER` (5 s) before the streak is forgotten, so
+a device that builds and dies at once is bounded too. The device row shows `failed` with a
+per-direction title (output taps are tried once, never rebuilt).
 
-whisper.cpp applies its integrated VAD only in `whisper_full`, the entry point that uses the
-context's own state; `whisper_full_with_state`, which is what whisper-rs's `WhisperState::full`
-calls, ignores `params.vad` entirely. Prototyped on 2026-09-06: with `enable_vad(true)` set,
-8 s of zeros still decoded to "Thank you." So the gate runs the VAD itself.
+### Settings hygiene (phase 1)
 
-`Transcriber` holds a `Mutex<WhisperVadContext>` (Silero runs on the CPU and takes ~20 ms for
-8 s of audio, so the lock is uncontended in practice). `transcribe` does, in order:
-
-1. Drop inputs shorter than 0.5 s (the flush floor).
-2. `segments_from_samples` with `WhisperVadParams` at whisper.cpp's defaults (threshold 0.5,
-   min speech 250 ms, min silence 100 ms, pad 30 ms). Zero segments → return no lines; the
-   encoder never runs, which is why a silent tap now costs ~20 ms per segment instead of ~2 s.
-3. Build the filtered buffer the way `whisper_full` does: the detected speech regions
-   concatenated with 100 ms of silence between them.
-4. `state.full` on that buffer with `SamplingStrategy::BeamSearch { beam_size: 5, patience: -1.0 }`
-   and `set_language(Some("en"))`. On large-v3-turbo the decoder is four layers, so beam search
-   adds little over the encoder; one prototype run measured 1.96 s beam vs 2.06 s greedy on an
-   8.6 s sample, which is within noise and says only that beam is not expensive here. It is the
-   accuracy-over-speed choice the user asked for; the phase-1 ship report watches the dropped
-   segment count.
-5. Join whisper's sub-segments into **one transcript line per audio segment**, space-separated.
-   Today each sub-segment is its own row, and beam search tends to split mid-sentence
-   ("…second week" / "of October…"); one line per segment reads as one utterance, which is also
-   what phase 2's pause-based segments will be. Until phase 2 lands, a fixed 8 s window that
-   happens to hold two utterances yields them on one line; accepted for the phase-1 window.
-
-`WhisperSegment::no_speech_probability()` was evaluated as a second gate and not used: in the
-prototype it read 0.00 for every segment, speech or silence, under both greedy and beam
-decoding, so whatever it measures in this build it did not separate the two. The VAD is the
-gate. What the VAD gates is silence and non-speech noise; music, television or another
-person's call reaching an output tap is speech-like and still reaches whisper. That is the
-same audio a human would transcribe, and it is outside this unit.
-
-The concatenated buffer discards the real timing between speech regions. Nothing downstream
-reads sub-segment timestamps — `recorded_at` is the segment's capture time — so this is a
-known simplification, recorded here so a future phrase-level timing feature does not read
-positions out of this buffer.
-
-Sample offsets from the VAD's centisecond timestamps stay in integers: whisper.cpp derives
-them from integer sample positions, so `start`/`end` are converted with the existing
-`coreaudio::exact_u32_from_f64` pattern (round, then a checked conversion; the helper is
-private to that module and is moved to `pub(crate)` rather than duplicated) and multiplied by
-160 in `u64`; no `as` casts on floats, per the lint policy.
-
-Prototype results (scratch crate on whisper-rs 0.16, real large-v3-turbo, Metal):
-
-| Input                                             | VAD kept        | Result         |
-| ------------------------------------------------- | --------------- | -------------- |
-| 8 s digital zero                                  | 0 of 8.00 s     | skipped, 19 ms |
-| 8 s noise RMS 0.003                               | 0 of 8.00 s     | skipped, 26 ms |
-| 1.5 s noise tail                                  | 0 of 1.50 s     | skipped, 5 ms  |
-| 8.6 s speech synthesized with `say` + `afconvert` | 8.56 s          | verbatim       |
-| same, 3 s silence each side                       | 8.58 of 14.62 s | verbatim       |
-| same plus noise RMS 0.01                          | 8.43 s          | verbatim       |
-
-`transcription::bench` grows an `#[ignore]` accuracy test that runs those six cases through
-`Transcriber::transcribe` and asserts the three silent ones yield zero lines and the three
-speech ones contain "second week of October" (case-insensitive). It needs the downloaded
-whisper model, like the existing pool benchmark, so CI does not run it; the implementer runs
-it locally before each phase ships and quotes its output in the ship report. It is the evidence
-for success criterion 1.
-The speech fixture is generated at test time with macOS `say` + `afconvert` (both ship with
-macOS, which is the only platform darric builds for) into a temp dir, so no audio file is
-committed.
-
-### Capture give-up
-
-`source::run_source` records when the current failure streak began. Once a streak exceeds
-`GIVE_UP_AFTER = 60 s` the supervisor logs "gave up", sets `Failed`, and exits its loop; a
-successful rebuild resets the streak. The decision is a pure function
-(`should_give_up(streak_started: Instant, now: Instant) -> bool`) with a unit test. The UI's
-`failed` title becomes "Unavailable — stopped retrying" and the row shows a static "failed"
-label the way it shows "retrying" today, with a `DeviceRow` test.
-
-### Settings hygiene
-
-Migration `011_drop_ai_settings.sql`: `DELETE FROM settings WHERE key LIKE 'ai.%';`, added to
-`db/migrations.rs`. A test through `db::test_db()` inserts an `ai.claude.api_key` row before
-the migration list is applied — not possible with `to_latest`, so the test applies migrations
-up to 010, inserts, then applies 011 and asserts the row is gone.
+Migration 011 deletes every `ai.%` settings row, with a test that seeds a key at schema 010.
 
 ### Utterance segmentation (phase 2)
 
-`Segmenter` cuts at pauses instead of at a fixed sample count. Per 20 ms frame it computes RMS
-and classifies the frame against a noise floor: speech when RMS exceeds
-`max(4 × floor, 0.004)`. The floor updates **only from frames classified non-speech**: it drops
-immediately to a quieter non-speech frame and rises toward a louder one by at most 2 % per
-frame, so a loud utterance cannot drag it up and a room that gets noisier is tracked within a
-few seconds. It starts at 0.001. A segment is emitted when the buffer holds at least
-`MIN_SEGMENT = 3 s` and the last `PAUSE = 400 ms` of frames are all non-speech, or when it
-reaches `MAX_SEGMENT = 25 s` regardless. The buffer keeps the trailing pause so the next segment
-starts clean. This runs on the audio callback thread and is a handful of multiplies per frame.
-The Silero gate in `transcribe` still owns the speech/non-speech decision inside a segment;
-the energy detector only chooses cut points, so a noisy room degrades to today's behaviour (cut at
-the cap) rather than to silence being transcribed.
+`Segmenter` cuts at pauses: per-20 ms-frame RMS against an adaptive floor, speech when RMS >
+max(4 × floor, 0.004); a cut after 400 ms of non-speech once 2 s are buffered, or at 25 s. The
+floor drops at once on a quieter non-speech frame, rises ≤ 2 %/frame on a louder one, and
+creeps ≤ 0.2 %/frame during speech. Leading silence is trimmed to one pause in whole frames;
+the pause that ended a segment stays to open the next. The minimum is 2 s, not the 3 s first
+written here, because criterion 5's stream cannot yield two segments under 3 s. The clock is
+re-anchored whenever a chunk arrives more than 100 ms later than the buffered audio accounts
+for, so a rebuilt stream does not leave every later stamp early. See
+[[2026-09-06-decision-segments-end-at-pauses-found-by-an-energy-detector]] and
+[[2026-09-06-bug-capture-stamps-drifted-after-a-delivery-gap]].
 
-Each emitted segment carries `captured_at`, the wall-clock time its first sample arrived.
-`SegmentJob` and `TranscribedLine` carry it through the pool and `persist_and_emit` writes it
-as `recorded_at`. The MCP `get_transcript` description and README drop the "transcription
-order" caveat in favour of "lines are timestamped at capture; sort by `recorded_at`".
+Each segment carries `captured_at`; `SegmentJob`, `TranscribedLine` and `audio::recorded_at`
+carry it into the insert and the `transcript_chunk` event. The live view inserts lines by
+`recorded_at`, matching the reload order. The MCP `get_transcript` description and README say to
+sort by it. See [[2026-09-06-decision-recorded-at-is-the-capture-time]].
 
 ### Band-limited resampler (phase 2)
 
-`resample::Resampler` replaces `resample_mono`: a stateful windowed-sinc interpolator (32 taps,
-Blackman window, cutoff at 0.45 × the lower of the two rates) that carries its tail between
-calls so buffer boundaries do not click. The read position is carried as the same fixed-point
-`u64` numerator over `TARGET_RATE` that `resample_mono` uses today, so the fractional phase
-converts to `f32` exactly and no float is cast to an index. One instance per capture source, created in
-`build_stream` / `start_io_proc`. Tests: a 1 kHz tone at 48 kHz comes out at unity within 1 dB;
-a 12 kHz tone comes out at least 40 dB down; a 16 kHz input passes through unchanged; output
-length across many small pushes equals the length of one large push.
+`resample::Resampler`: a 64-tap Blackman-windowed sinc (32 was proposed; it does not reach the
+40 dB criterion), cutoff at 0.9 × the lower Nyquist, one stateful instance per stream in
+`build_stream` and behind a mutex in the tap's IOProc block. Positions are fixed-point `u64`,
+the ratio enters as gcd-reduced `u16`s, weights are DC-normalised. About 1 % of real time per
+stereo 48 kHz stream in release. See
+[[2026-09-06-reference-a-windowed-sinc-resampler-needs-64-taps-for-40-db]].
 
-### Candidate approaches considered
+### Tests
 
-- **A (chosen): Silero VAD run in `transcribe` before whisper + energy-based cut points in the
-  segmenter + bundled model.** Silence never reaches the encoder; the cheap detector only picks
-  boundaries. (whisper.cpp's integrated VAD was the first draft of A and is unreachable through
-  whisper-rs's state API — see Transcription gate.)
-- **B: run Silero ourselves per device on a dedicated thread, cut on its boundaries.** Best
-  boundaries, but one more thread and channel per device, and whisper-rs's VAD context is a
-  whole-buffer call with no streaming state, so it would be re-run on a sliding window anyway.
-- **C: RMS threshold + a "Thank you." phrase filter, no upgrade.** A day's work, but it treats
-  one hallucination string and leaves every other one, and the chopping is untouched.
+CI runs the bundled-VAD silence test, the migration test, the supervisor loop tests, the
+segmenter and resampler tests, the timestamp plumbing test, and the frontend ordering test.
+Ignored, run locally before each ship: the model-level accuracy test (six silent inputs → no
+line; synthesized speech plain, silence-padded and with noise → verbatim), the end-to-end
+pipeline test (segmenter → VAD → whisper on the fixture spoken twice → whole-sentence lines in
+order), the two real-device hardware tests (taps; microphones), and the 75 s give-up test. The
+fixture is synthesized with `say` + `afconvert` under a bounded child
+([[2026-09-06-reference-say-under-cargo-test-needs-a-bounded-child-not-just-closed-stdin]]).
 
 ### Rejected
 
-- Downloading the VAD model from Hugging Face: blocked network, and a second copy of the
-  download path.
-- `rubato` for resampling: its 5.0 API is adapter-based and unfamiliar; a 32-tap sinc is
-  eighty lines with tests and no dependency.
-- Disabling duplicate microphones automatically: two microphones hearing the same room is a
-  device-selection question the existing per-device toggle already answers.
+- whisper.cpp's integrated VAD through `FullParams` — unreachable via whisper-rs.
+- Downloading the VAD model — huggingface.co is blocked on some networks; 885 KB needs no
+  network.
+- Running Silero per device on its own thread for cut points — one more thread and channel per
+  device for boundaries the energy detector already finds well enough.
+- `rubato` for resampling — an unfamiliar adapter API for eighty lines of sinc.
+- An RMS threshold or a "Thank you." phrase filter — noise at RMS 0.003 still produced text.
+- Auto-disabling duplicate microphones — a device-selection question the per-device toggle
+  answers.
 
 ## Success criteria
 
@@ -224,7 +142,9 @@ length across many small pushes equals the length of one large push.
    the user to make one recording in the app with nothing playing and confirm that no `output`
    lines appear; phase 2 does not ship until that confirmation is recorded in the scratchpad,
    and a failed confirmation is a phase-1 defect to fix before phase 2. (Reworded by the
-   2026-09-06 replan; originally "verified in the running app".)
+   2026-09-06 replan; originally "verified in the running app". The confirmation gate was
+   waived by the user on 2026-09-06 — "we can always fix forward" — and the in-app check runs
+   on main with both phases merged.)
 3. Sixty seconds after a capture device disappears its row reads "failed", not "retrying", and
    the supervisor thread has exited; `should_give_up` has a unit test.
 4. After migration 011 no `settings` row has a key beginning `ai.`; a Rust test proves it.
@@ -247,7 +167,8 @@ length across many small pushes equals the length of one large push.
    segment, flush floor, capture give-up, migration 011, README. Criteria 1, 2, 3, 4, 8a.
 2. **utterance-segmentation** — pause-based segmenter, capture-time `recorded_at`,
    windowed-sinc resampler, MCP/README wording. Criteria 5, 6, 7, 8b. Precondition: the
-   criterion-2 user confirmation from phase 1 is recorded in the scratchpad.
+   criterion-2 user confirmation from phase 1 is recorded in the scratchpad (waived by the
+   user on 2026-09-06; see the criterion).
 
 ## Open Questions
 

@@ -5,14 +5,18 @@ import { useTranscript } from "./useTranscript";
 import { mockCommands } from "../test/tauri-helpers";
 import type { InvokeArgs } from "@tauri-apps/api/core";
 
-function chunk(sessionId: string, content: string): Record<string, string> {
+function chunk(
+  sessionId: string,
+  content: string,
+  recordedAt = "2024-01-01T09:00:05Z",
+): Record<string, string> {
   return {
     session_id: sessionId,
     device_id: "d1",
     device_name: "MacBook Microphone",
     direction: "input",
     content,
-    recorded_at: "2024-01-01T09:00:05Z",
+    recorded_at: recordedAt,
   };
 }
 
@@ -110,6 +114,29 @@ describe("useTranscript session scoping", () => {
     });
     expect(result.current[0]?.content).toBe("A's trailing flush line");
     expect(result.current[0]?.session_id).toBe("A");
+  });
+});
+
+describe("useTranscript live ordering", () => {
+  it("places a line by its capture time, not its arrival", async () => {
+    // Whisper finishes a microphone's segment after a tap's later one; the
+    // reload sorts by recorded_at, so the live view must agree with it.
+    mockCommands({ get_session_transcript: () => [] });
+    const { result } = renderHook(() => useTranscript("A", true));
+    await listenersReady();
+
+    await act(async () => {
+      await emit("transcript_chunk", chunk("A", "said second", "2024-01-01T09:00:10Z"));
+      await emit("transcript_chunk", chunk("A", "said first", "2024-01-01T09:00:02Z"));
+      await emit("transcript_chunk", chunk("A", "said second too", "2024-01-01T09:00:10Z"));
+    });
+    await waitFor(() => {
+      expect(result.current.map((l) => l.content)).toEqual([
+        "said first",
+        "said second",
+        "said second too",
+      ]);
+    });
   });
 });
 
