@@ -21,7 +21,7 @@ the whole problem. There is no way to hand anyone a build of `main`.
 ### Why reconcile merges are already excluded, and why that is not enough
 
 [[2026-09-05-reference-github-token-actions-trigger-no-workflows]] records that
-`knowledge-reconcile.yml` opens *and merges* its own PR with `GITHUB_TOKEN`, and GitHub creates no
+`knowledge-reconcile.yml` opens _and merges_ its own PR with `GITHUB_TOKEN`, and GitHub creates no
 workflow run for anything `GITHUB_TOKEN` does. A reconcile merge therefore fires **no `push` event
 on `main` at all** — a release workflow triggered on `push` never sees it, with no filter written.
 
@@ -65,10 +65,10 @@ path. `workflow_dispatch` is the manual re-cut hatch, matching `knowledge-reconc
 Cross-compiling that from arm64 to x86_64 is the single largest build risk available here, so each
 architecture gets its own native runner:
 
-| Runner | Arch | DMG |
-|---|---|---|
-| `macos-15` | `aarch64` | `Darric_0.1.0_aarch64.dmg` |
-| `macos-15-intel` | `x64` | `Darric_0.1.0_x64.dmg` |
+| Runner           | Arch      | DMG                        |
+| ---------------- | --------- | -------------------------- |
+| `macos-15`       | `aarch64` | `Darric_0.1.0_aarch64.dmg` |
+| `macos-15-intel` | `x64`     | `Darric_0.1.0_x64.dmg`     |
 
 `macos-13` — the label a reader reaches for first — **was retired on 2025-12-04** and would fail
 immediately. `macos-15-intel` is the current x86_64 image and is supported through Fall 2027; it is
