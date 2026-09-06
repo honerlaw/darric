@@ -47,3 +47,4 @@ the only architecture with a future on hosted runners.
 ## Related
 
 - [[2026-09-05-reference-whisper-inference-serialises-on-one-metal-gpu]] — the Metal dependency that makes the native-runner-per-arch choice matter
+- [[2026-09-05-reference-an-unsigned-mac-app-reports-damaged-not-unidentified]] — see also
