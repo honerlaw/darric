@@ -47,6 +47,7 @@ export function useTranscript(sessionId: string | null, isLive: boolean): Transc
       setLines((prev) => [
         ...prev,
         {
+          seq: null,
           id: crypto.randomUUID(),
           session_id: chunk.session_id,
           device_id: chunk.device_id,

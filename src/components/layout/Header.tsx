@@ -1,5 +1,7 @@
 import type React from "react";
 import { formatElapsed } from "../../lib/utils";
+import type { McpServerStatus } from "../../types";
+import { McpChip } from "../McpChip";
 
 function recordLabel(
   isRecording: boolean,
@@ -47,6 +49,8 @@ interface HeaderProps {
    * which recording it appends to, now that it no longer sits beside one.
    */
   resumeTarget: string | null;
+  /** The in-app MCP server's status, or null until it has been read. */
+  mcpStatus: McpServerStatus | null;
   onRecord: () => void;
   onStop: () => void;
   onResume: () => void;
@@ -59,6 +63,7 @@ export function Header({
   downloadProgress,
   elapsedSeconds,
   resumeTarget,
+  mcpStatus,
   onRecord,
   onStop,
   onResume,
@@ -79,6 +84,8 @@ export function Header({
       </div>
 
       <div className="flex-1" />
+
+      <McpChip status={mcpStatus} />
 
       {isRecording && (
         <div className="flex items-center gap-2">

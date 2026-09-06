@@ -4,11 +4,19 @@ import { emit } from "@tauri-apps/api/event";
 import App from "./App";
 import { mockCommands } from "./test/tauri-helpers";
 
+const MCP_LISTENING = {
+  listening: true,
+  port: 27842,
+  url: "http://127.0.0.1:27842/mcp",
+  error: null,
+};
+
 function mockEmptyInstall(downloadState: number | null = null): void {
   mockCommands({
     list_sessions: () => [],
     list_capture_devices: () => [],
     capture_drop_count: () => 0,
+    mcp_server_status: () => MCP_LISTENING,
     model_download_state: () => downloadState,
   });
 }
@@ -28,6 +36,7 @@ function mockOneRecording(): void {
     ],
     list_capture_devices: () => [],
     capture_drop_count: () => 0,
+    mcp_server_status: () => MCP_LISTENING,
     get_session_transcript: () => [],
   });
 }
@@ -185,6 +194,7 @@ function mockPendingStop(): { release: () => void; stopCalls: () => number } {
     list_sessions: () => [LIVE_SESSION, PAST_SESSION],
     list_capture_devices: () => [],
     capture_drop_count: () => 0,
+    mcp_server_status: () => MCP_LISTENING,
     get_session_transcript: () => [],
     start_session: () => "live",
     stop_session: async () => {
@@ -258,6 +268,7 @@ describe("App stop feedback", () => {
       };
     });
     mockCommands({
+      mcp_server_status: () => MCP_LISTENING,
       model_download_state: () => null,
       list_sessions: () => [LIVE_SESSION],
       list_capture_devices: () => [],
@@ -344,6 +355,7 @@ describe("App session-scoped UI state", () => {
       list_sessions: () => [LIVE_SESSION],
       list_capture_devices: () => [],
       capture_drop_count: () => 0,
+      mcp_server_status: () => MCP_LISTENING,
       get_session_transcript: () => [],
       start_session: () => "live",
       stop_session: () => undefined,
@@ -370,6 +382,7 @@ describe("App session-scoped UI state", () => {
       list_sessions: () => [LIVE_SESSION, PAST_SESSION],
       list_capture_devices: () => [],
       capture_drop_count: () => 0,
+      mcp_server_status: () => MCP_LISTENING,
       get_session_transcript: () => [],
       start_session: () => "live",
       stop_session: () => undefined,
@@ -419,6 +432,7 @@ describe("App session-scoped UI state", () => {
     let dropped = 12;
     let started = 0;
     mockCommands({
+      mcp_server_status: () => MCP_LISTENING,
       model_download_state: () => null,
       // Two distinct recordings, as two `start_session` calls really produce —
       // the reset is keyed on the session changing, so resuming the *same* one
@@ -475,6 +489,7 @@ describe("App session-scoped UI state", () => {
       list_sessions: () => [LIVE_SESSION, PAST_SESSION],
       list_capture_devices: () => [],
       capture_drop_count: () => 0,
+      mcp_server_status: () => MCP_LISTENING,
       get_session_transcript: () => [],
       start_session: async () => {
         await pending;
@@ -515,6 +530,7 @@ describe("App session-scoped UI state", () => {
       list_sessions: () => [LIVE_SESSION, PAST_SESSION],
       list_capture_devices: () => [],
       capture_drop_count: () => 0,
+      mcp_server_status: () => MCP_LISTENING,
       get_session_transcript: () => [],
       resume_session: async () => {
         await pending;
@@ -546,6 +562,7 @@ describe("App session-scoped UI state", () => {
       list_sessions: () => [PAST_SESSION],
       list_capture_devices: () => [],
       capture_drop_count: () => 0,
+      mcp_server_status: () => MCP_LISTENING,
       get_session_transcript: () => [],
       resume_session: () => "past",
       stop_session: () => undefined,
@@ -581,6 +598,7 @@ describe("App session-scoped UI state", () => {
       list_sessions: () => [PAST_SESSION],
       list_capture_devices: () => [],
       capture_drop_count: () => 0,
+      mcp_server_status: () => MCP_LISTENING,
       get_session_transcript: () => [],
       resume_session: async () => {
         await pending;
@@ -639,6 +657,7 @@ describe("App resume placement and availability", () => {
       list_sessions: () => [LIVE_SESSION, PAST_SESSION],
       list_capture_devices: () => [],
       capture_drop_count: () => 0,
+      mcp_server_status: () => MCP_LISTENING,
       get_session_transcript: () => [],
       start_session: () => "live",
     });
@@ -677,6 +696,7 @@ describe("App resume placement and availability", () => {
       ],
       list_capture_devices: () => [],
       capture_drop_count: () => 0,
+      mcp_server_status: () => MCP_LISTENING,
       get_session_transcript: () => [],
       resume_session: async () => {
         await pending;
@@ -714,6 +734,7 @@ describe("App delete failure handling", () => {
       list_sessions: () => [STANDUP],
       list_capture_devices: () => [],
       capture_drop_count: () => 0,
+      mcp_server_status: () => MCP_LISTENING,
       get_session_transcript: () => [],
       delete_session: () => {
         throw new Error("database is locked");
@@ -771,6 +792,7 @@ describe("App delete failure handling", () => {
       list_sessions: () => (deleted ? [PAST_SESSION] : [STANDUP, PAST_SESSION]),
       list_capture_devices: () => [],
       capture_drop_count: () => 0,
+      mcp_server_status: () => MCP_LISTENING,
       get_session_transcript: () => [],
       delete_session: async () => {
         await pending;
@@ -805,6 +827,7 @@ describe("App delete failure handling", () => {
       list_sessions: () => (deleted ? [] : [STANDUP]),
       list_capture_devices: () => [],
       capture_drop_count: () => 0,
+      mcp_server_status: () => MCP_LISTENING,
       get_session_transcript: () => [],
       delete_session: () => {
         deleted = true;

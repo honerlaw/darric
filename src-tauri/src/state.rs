@@ -1,5 +1,6 @@
 use crate::audio::device::ExclusionRegistry;
 use crate::audio::CaptureEngine;
+use crate::mcp_server::McpServerState;
 use crate::transcription::loader::TranscriberSlot;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
@@ -28,6 +29,9 @@ pub struct AppState {
     /// exceptions rather than the selections, and a newly plugged-in device is
     /// therefore live without needing to be enabled by hand.
     pub disabled_devices: Mutex<HashSet<String>>,
+    /// The loopback MCP server, or why it is not listening. Set once in
+    /// `setup`; the handle stops the server when the state is dropped.
+    pub mcp_server: Mutex<McpServerState>,
 }
 
 impl AppState {
@@ -39,6 +43,7 @@ impl AppState {
             session_transition: tokio::sync::Mutex::new(()),
             exclusions: ExclusionRegistry::new(),
             disabled_devices: Mutex::new(disabled_devices),
+            mcp_server: Mutex::new(McpServerState::NotStarted),
         }
     }
 }

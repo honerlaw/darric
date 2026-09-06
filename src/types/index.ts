@@ -10,6 +10,12 @@ export interface Session {
 export type Direction = "input" | "output";
 
 export interface TranscriptLine {
+  /**
+   * The backend's SQLite rowid, the MCP server's paging cursor. Null on a line
+   * appended live from a `transcript_chunk`, which is not read back from the
+   * database until the transcript reloads.
+   */
+  seq: number | null;
   id: string;
   session_id: string;
   device_id: string;
@@ -39,4 +45,14 @@ export interface CaptureDevice {
   state: DeviceState;
   /** RMS level in [0, 1], for the meter. */
   level: number;
+}
+
+/** What the in-app MCP server reports about itself. */
+export interface McpServerStatus {
+  listening: boolean;
+  /** The bound port, or the port that could not be bound. */
+  port: number;
+  url: string | null;
+  /** Why the server is not listening, when it is not. */
+  error: string | null;
 }

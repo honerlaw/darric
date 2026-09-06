@@ -13,6 +13,26 @@ Built with Tauri 2, Rust, React, and TypeScript.
 Multi-device capture (every input and output device at once, with per-device transcript
 attribution) is in progress; see `.minerva/work/2026-09-05-strip-to-recorder/proposal.md`.
 
+## Query darric from Claude
+
+While darric is running it serves a read-only [MCP](https://modelcontextprotocol.io) server on
+`http://127.0.0.1:27842/mcp`, so Claude Code (or any MCP client that speaks streamable HTTP) can
+read your recordings — including one still in progress. Connect Claude Code with one line, or
+click the `MCP` chip in darric's header to copy it:
+
+```sh
+claude mcp add --transport http darric http://127.0.0.1:27842/mcp
+```
+
+Four tools: `status` reports whether a recording is running and which devices are capturing;
+`list_sessions` lists recordings newest first; `get_transcript` reads one as device-attributed
+lines, paged by a cursor so a second call during a live meeting returns only what has been said
+since; `search` finds where something was said across every recording.
+
+The server binds loopback only and reads through a read-only database connection, so nothing an
+agent does can write to your data or slow the recorder. If the chip reads `port busy`, another
+process holds port 27842; quit it and relaunch darric.
+
 ## Downloads
 
 Every merge to `main` that can change the binary publishes a prerelease on the

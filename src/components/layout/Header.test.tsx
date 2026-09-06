@@ -10,6 +10,7 @@ const BASE_PROPS = {
   downloadProgress: null,
   elapsedSeconds: 0,
   resumeTarget: null,
+  mcpStatus: null,
   onRecord: (): void => undefined,
   onStop: (): void => undefined,
   onResume: (): void => undefined,

@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { CaptureDevice, Session, TranscriptChunk, TranscriptLine } from "../types";
+import type {
+  CaptureDevice,
+  McpServerStatus,
+  Session,
+  TranscriptChunk,
+  TranscriptLine,
+} from "../types";
 
 // Sessions
 export const startSession = async (topic?: string): Promise<string> =>
@@ -31,6 +37,10 @@ export const captureDropCount = async (): Promise<number> => invoke<number>("cap
 /** Percentage downloaded, or null when no download is in flight. */
 export const modelDownloadState = async (): Promise<number | null> =>
   invoke<number | null>("model_download_state");
+
+// MCP server
+export const mcpServerStatus = async (): Promise<McpServerStatus> =>
+  invoke<McpServerStatus>("mcp_server_status");
 
 // Settings
 export const saveSetting = async (key: string, value: string): Promise<void> => {

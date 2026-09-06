@@ -80,9 +80,10 @@ the other.
 `transcript_lines` has a `TEXT PRIMARY KEY`, so its rowid is implicit and is reassigned whenever
 the table is rebuilt: by `VACUUM`, which nothing in darric runs, and by a create-copy-drop-rename
 migration, which migration 010 already is and which any future `CHECK` change would be again. A
-cursor is therefore valid only for the life of the app process: a rebuild happens during
-`db::open` at startup, and a restart drops every MCP session anyway, so no live cursor survives
-into a renumbered table. The tool description states that a cursor must not be persisted across
+cursor is therefore valid only for the life of the app process: a rebuild can only ever run
+inside `db::open` at startup, on the one launch that applies a new migration, before the server
+exists, and a restart drops every MCP session anyway, so no live cursor survives into a
+renumbered table. The tool description states that a cursor must not be persisted across
 darric restarts. If cursors ever need to outlive a restart, they must move to an explicit
 `INTEGER` column first.
 
@@ -107,12 +108,12 @@ description says so.
 
 ### Tools
 
-| Tool | Arguments | Returns |
-| --- | --- | --- |
-| `status` | none | `recording: bool`; live session `id`, `topic`, `started_at` or `null`; per-device `id`, `name`, `direction`, `state`; `dropped_segments` |
-| `list_sessions` | `limit?` (default 50, max 500), `offset?` (default 0) | newest first: `id`, `topic`, `started_at`, `ended_at`, `recorded_minutes`, `in_progress` |
+| Tool             | Arguments                                                         | Returns                                                                                                                                             |
+| ---------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`         | none                                                              | `recording: bool`; live session `id`, `topic`, `started_at` or `null`; per-device `id`, `name`, `direction`, `state`; `dropped_segments`            |
+| `list_sessions`  | `limit?` (default 50, max 500), `offset?` (default 0)             | newest first: `id`, `topic`, `started_at`, `ended_at`, `recorded_minutes`, `in_progress`                                                            |
 | `get_transcript` | `session_id`, `after?` (cursor), `limit?` (default 500, max 2000) | the session header; `lines[]` of `seq`, `device_id`, `device_name`, `direction`, `content`, `recorded_at` in rowid order; `next_cursor`; `has_more` |
-| `search` | `query`, `limit?` (default 50, max 200), `session_id?` | `hits[]` of `seq`, `session_id`, `topic`, `started_at`, `device_name`, `direction`, `content`, `recorded_at`, newest first |
+| `search`         | `query`, `limit?` (default 50, max 200), `session_id?`            | `hits[]` of `seq`, `session_id`, `topic`, `started_at`, `device_name`, `direction`, `content`, `recorded_at`, newest first                          |
 
 - `search` is a case-insensitive `LIKE` over line content and session topic only, never device
   names. `%` and `_` in the query are escaped so a literal underscore does not become a wildcard.

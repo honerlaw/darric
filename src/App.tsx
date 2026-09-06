@@ -5,6 +5,7 @@ import { ModelDownloadBanner } from "./components/ModelDownloadBanner";
 import { RecorderPane } from "./components/RecorderPane";
 import { RecordingList } from "./components/RecordingList";
 import { useDevices } from "./hooks/useDevices";
+import { useMcpServer } from "./hooks/useMcpServer";
 import { useSession } from "./hooks/useSession";
 import { useTranscript } from "./hooks/useTranscript";
 import { captureDropCount } from "./lib/tauri";
@@ -34,6 +35,7 @@ export default function App(): React.JSX.Element {
   } = useSession();
 
   const { devices, toggle: toggleDevice } = useDevices(isRecording);
+  const mcpStatus = useMcpServer();
   const [droppedSegments, setDroppedSegments] = useState(0);
 
   const transcriptLines = useTranscript(
@@ -133,6 +135,7 @@ export default function App(): React.JSX.Element {
             ? sessionLabel(viewingSession)
             : null
         }
+        mcpStatus={mcpStatus}
         onRecord={handleRecord}
         onStop={handleStop}
         onResume={handleResume}
