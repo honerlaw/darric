@@ -16,6 +16,8 @@ pub enum AppError {
     NoSession,
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("mcp server error: {0}")]
+    McpServer(String),
 }
 
 impl serde::Serialize for AppError {

@@ -28,44 +28,7 @@ use uuid::Uuid;
 /// property of the GPU queue and should hold, but the absolute timings will not.
 const WHISPER_WORKERS: usize = 2;
 
-#[derive(Debug, serde::Serialize)]
-pub struct Session {
-    pub id: String,
-    pub topic: Option<String>,
-    pub started_at: String,
-    pub ended_at: Option<String>,
-    pub created_at: String,
-    pub recorded_minutes: i64,
-}
-
-#[derive(Debug, serde::Serialize)]
-pub struct TranscriptLine {
-    pub id: String,
-    pub session_id: String,
-    pub device_id: String,
-    pub device_name: String,
-    pub direction: String,
-    pub content: String,
-    pub recorded_at: String,
-}
-
-const SESSION_SELECT: &str = "SELECT s.id, s.topic, s.started_at, s.ended_at, s.created_at,
-   COALESCE(CAST(SUM(
-     (julianday(COALESCE(seg.ended_at, datetime('now'))) - julianday(seg.started_at)) * 1440
-   ) AS INTEGER), 0) as recorded_minutes
- FROM sessions s
- LEFT JOIN recording_segments seg ON seg.session_id = s.id";
-
-fn map_session(row: &rusqlite::Row<'_>) -> rusqlite::Result<Session> {
-    Ok(Session {
-        id: row.get(0)?,
-        topic: row.get(1)?,
-        started_at: row.get(2)?,
-        ended_at: row.get(3)?,
-        created_at: row.get(4)?,
-        recorded_minutes: row.get(5)?,
-    })
-}
+pub use crate::db::sessions::{Session, TranscriptLine};
 
 /// Devices to capture: everything discovered, minus the user's exceptions.
 fn devices_to_capture(state: &tauri::State<'_, AppState>) -> Vec<device::CaptureDevice> {
@@ -327,12 +290,7 @@ pub async fn list_sessions(state: tauri::State<'_, AppState>) -> Result<Vec<Sess
         .0
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let sql = format!("{SESSION_SELECT} GROUP BY s.id ORDER BY s.started_at DESC");
-    let mut stmt = db.prepare(&sql)?;
-    let sessions = stmt
-        .query_map([], map_session)?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    Ok(sessions)
+    Ok(crate::db::sessions::list_sessions(&db, None, 0)?)
 }
 
 #[tauri::command]
@@ -369,10 +327,8 @@ pub async fn update_session(
         "UPDATE sessions SET topic = ?1 WHERE id = ?2",
         rusqlite::params![topic, id],
     )?;
-    let sql = format!("{SESSION_SELECT} WHERE s.id = ?1 GROUP BY s.id");
-    let mut stmt = db.prepare(&sql)?;
-    let session = stmt.query_row(rusqlite::params![id], map_session)?;
-    Ok(session)
+    crate::db::sessions::get_session(&db, &id)?
+        .ok_or_else(|| AppError::Db(rusqlite::Error::QueryReturnedNoRows))
 }
 
 #[tauri::command]
@@ -385,63 +341,19 @@ pub async fn get_session_transcript(
         .0
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
-    let mut stmt = db.prepare(
-        "SELECT id, session_id, device_id, device_name, direction, content, recorded_at
-         FROM transcript_lines WHERE session_id = ?1 ORDER BY recorded_at ASC",
-    )?;
-    let lines = stmt
-        .query_map(rusqlite::params![session_id], |row| {
-            Ok(TranscriptLine {
-                id: row.get(0)?,
-                session_id: row.get(1)?,
-                device_id: row.get(2)?,
-                device_name: row.get(3)?,
-                direction: {
-                    let raw: String = row.get(4)?;
-                    if crate::transcription::pool::Direction::parse(&raw).is_none() {
-                        log::warn!(
-                            "[session] transcript line {} has unknown direction {raw:?}",
-                            row.get::<_, String>(0)?
-                        );
-                    }
-                    raw
-                },
-                content: row.get(5)?,
-                recorded_at: row.get(6)?,
-            })
-        })?
-        .collect::<std::result::Result<Vec<_>, _>>()?;
-    Ok(lines)
+    Ok(crate::db::sessions::transcript_lines(&db, &session_id)?)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use rusqlite::Connection;
-    use rusqlite_migration::{Migrations, M};
 
     const SESSION: &str = "11111111-1111-4111-8111-111111111111";
     const TS: &str = "2024-01-01T09:00:00Z";
 
     fn db() -> Connection {
-        let mut conn = Connection::open_in_memory().expect("in-memory DB");
-        conn.execute_batch("PRAGMA foreign_keys=ON;")
-            .expect("PRAGMA");
-        Migrations::new(vec![
-            M::up(include_str!("../../migrations/001_initial.sql")),
-            M::up(include_str!("../../migrations/002_notes_tasks.sql")),
-            M::up(include_str!("../../migrations/003_reset_notes_tasks.sql")),
-            M::up(include_str!("../../migrations/004_session_notes.sql")),
-            M::up(include_str!("../../migrations/005_recording_segments.sql")),
-            M::up(include_str!("../../migrations/006_chat.sql")),
-            M::up(include_str!("../../migrations/007_speaker_label.sql")),
-            M::up(include_str!("../../migrations/008_tags.sql")),
-            M::up(include_str!("../../migrations/009_strip_to_recorder.sql")),
-            M::up(include_str!("../../migrations/010_device_attribution.sql")),
-        ])
-        .to_latest(&mut conn)
-        .expect("migrations");
-        conn
+        crate::db::test_db()
     }
 
     fn seed_session(conn: &Connection, ended_at: Option<&str>) {

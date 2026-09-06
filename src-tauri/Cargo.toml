@@ -39,6 +39,13 @@ futures-util = "0.3"
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
+tokio-util = "0.7"
+
+# MCP server (read-only, loopback). rmcp validates the Host header by default,
+# which is the DNS-rebinding floor the 2026-05-19 decision requires.
+rmcp = { version = "3.2", default-features = false, features = ["server", "macros", "transport-streamable-http-server", "schemars"] }
+schemars = "1.0"
+axum = "0.8"
 
 
 # Utilities
@@ -55,8 +62,12 @@ block2 = "0.6.2"
 objc2-core-audio-types = "0.3.2"
 
 [dev-dependencies]
+rmcp = { version = "3.2", default-features = false, features = ["client", "transport-streamable-http-client-reqwest"] }
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt"] }
+# rmcp's streamable-HTTP client is implemented for reqwest 0.13; the app's model
+# downloader is on 0.12. Only the protocol round-trip test needs this one.
+reqwest13 = { package = "reqwest", version = "0.13", default-features = false }
 
 [lints.rust]
 missing_docs = "allow"

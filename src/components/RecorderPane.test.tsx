@@ -68,6 +68,7 @@ describe("RecorderPane title editing", () => {
 });
 
 const LINE: TranscriptLine = {
+  seq: 1,
   id: "l1",
   session_id: "a",
   device_id: "d1",
