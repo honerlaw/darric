@@ -1,7 +1,7 @@
 # Proposal: release-on-merge
 
 **Date**: 2026-09-05
-**Status**: Draft
+**Status**: Shipped (2026-09-05)
 
 ## Goal
 
@@ -130,6 +130,47 @@ remedy, `xattr -d com.apple.quarantine`, rather than "right-click → Open", whi
   users, but it cross-compiles the x86_64 half of whisper.cpp/Metal on an arm64 host — the exact
   risk the native matrix exists to avoid, for a build that has never been proven in this repo.
 
+### What changed in review
+
+Six defects in the workflow were found by the code-review pass and fixed before shipping. Five of
+them shared a shape worth naming: **a control that looks like it guarantees something, and does
+not.**
+
+1. **The concurrency group did not serialise — it evicted.** `cancel-in-progress: false` promises
+   only that a _running_ release is not cancelled; a group holds one _pending_ run, so a third
+   merge landing during the first one's build cancelled the second's run outright and that commit
+   never got a release. Real runs are now keyed per commit, PR dry runs per PR ref. The "every
+   merge" claim in this proposal and in the README was false until this was fixed, and is true
+   now. Promoted as
+   [[2026-09-05-constraint-a-concurrency-group-queues-one-run-and-evicts-the-rest]].
+2. **`if-no-files-found: error` did not carry across the artifact handoff.** `download-artifact`
+   has no equivalent input and only _warns_ when its pattern matches nothing, so re-running just
+   the release job — the documented recovery path — after one artifact had expired would have
+   published a one-architecture release and gone green. The release step now asserts both DMGs are
+   present. Promoted as
+   [[2026-09-05-reference-actions-download-artifact-warns-where-upload-errors]].
+3. **`workflow_dispatch` was not restricted to `main`.** The release job's guard was only "not a
+   pull request", so dispatching from a feature branch would have published a real prerelease
+   named `main-<sha>` from code that never merged. The guard now names the two legal cases.
+4. **`gh release view` matched the tag name only.** A release already standing under that tag for
+   a different commit would have had another commit's binaries clobbered into it; the existing
+   release's `targetCommitish` is now compared against `$GITHUB_SHA`.
+5. **`permissions: contents: write` sat at workflow level**, handing a repo-write token to the
+   build job while it runs `npm ci` and cmake/whisper.cpp build scripts. The workflow default is
+   now `contents: read`, with write granted only on the release job.
+6. Including `github.event_name` in the concurrency key put a manual re-cut and the push run for
+   the same commit in _different_ groups, where they could race for the same tag — subsumed by the
+   per-commit key in (1).
+
+The release script was verified against a stubbed `gh` across all five reachable states: zero
+DMGs, one DMG, two DMGs with no existing release, two DMGs re-running on its own release, and a
+tag owned by a different commit. Only the two-DMG cases proceed.
+
+One review finding was not acted on: the macOS setup block (cmake / rust-toolchain / rust-cache /
+setup-node / npm ci) now appears in four job definitions across two workflows and could be a
+composite action. It has no failure scenario and the refactor reaches `check.yml`, outside this
+diff.
+
 ## Success criteria
 
 1. `.github/workflows/release.yml` triggers on `push` to `main` with
@@ -155,4 +196,7 @@ remedy, `xattr -d com.apple.quarantine`, rather than "right-click → Open", whi
 - **"Various builds" is read as both architectures**, not as multiple bundle formats. Only `.dmg`
   ships; `.app.tar.gz` would double the assets for no distinct use. Reversible either way.
 - The Intel leg's runner label is supported through Fall 2027 and is the last x86_64 image. Nothing
-  to do now; the Intel row simply comes out of the matrix when it lapses.
+  to do now; the Intel row simply comes out of the matrix when it lapses. Recorded as
+  [[2026-09-05-reference-macos-13-is-retired-and-macos-15-intel-is-the-last-x86-64-image]].
+- Signing is deferred, not dismissed — it is gated on a paid Apple Developer account rather than on
+  the workflow. Filed as #37.
