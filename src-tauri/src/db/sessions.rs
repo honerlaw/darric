@@ -42,8 +42,10 @@ pub struct TranscriptLine {
 #[derive(Debug)]
 pub struct TranscriptPage {
     pub lines: Vec<TranscriptLine>,
-    /// Pass back as `after` to fetch what landed since. `None` when `lines` is
-    /// empty, in which case the caller's previous cursor is still the right one.
+    /// Pass back as `after` to fetch what landed since. When nothing new has
+    /// landed this echoes the caller's own cursor, so a poll loop can always
+    /// feed it straight back; it is `None` only on an empty transcript read
+    /// from the start.
     pub next_cursor: Option<i64>,
     pub has_more: bool,
 }
@@ -180,7 +182,7 @@ pub fn transcript_page(
         .collect::<rusqlite::Result<_>>()?;
     let has_more = lines.len() > limit as usize;
     lines.truncate(limit as usize);
-    let next_cursor = lines.last().map(|l| l.seq);
+    let next_cursor = lines.last().map(|l| l.seq).or(after);
     Ok(TranscriptPage {
         lines,
         next_cursor,
@@ -188,7 +190,13 @@ pub fn transcript_page(
     })
 }
 
-/// Case-insensitive substring search over line content and session topic.
+/// Substring search over line content and session topic, case-insensitive
+/// for ASCII letters.
+///
+/// Both sides are folded the same way: SQLite's `lower()` is ASCII-only, so the
+/// query is folded with `to_ascii_lowercase` rather than Unicode lowering —
+/// otherwise "über" would miss "ÜBER" while matching "über", which is worse
+/// than being consistently ASCII-only.
 ///
 /// Sessions whose topic matches come back as sessions; lines whose content
 /// matches come back as lines, newest first. Device names are never matched:
@@ -239,12 +247,13 @@ pub fn search(
     Ok(SearchResults { sessions, lines })
 }
 
-/// `%query%`, lower-cased, with LIKE's own metacharacters escaped so a literal
-/// underscore or percent sign in a phrase matches itself rather than anything.
+/// `%query%`, ASCII-lower-cased to match SQLite's `lower()`, with LIKE's own
+/// metacharacters escaped so a literal underscore or percent sign in a phrase
+/// matches itself rather than anything.
 fn like_pattern(query: &str) -> String {
     let mut out = String::with_capacity(query.len() + 2);
     out.push('%');
-    for c in query.to_lowercase().chars() {
+    for c in query.to_ascii_lowercase().chars() {
         if matches!(c, '\\' | '%' | '_') {
             out.push('\\');
         }
@@ -303,13 +312,21 @@ mod tests {
         assert_eq!(contents, ["third"]);
         assert!(!page.has_more);
 
-        let page = transcript_page(&conn, "s", page.next_cursor, 2).unwrap();
+        let cursor = page.next_cursor;
+        let page = transcript_page(&conn, "s", cursor, 2).unwrap();
         assert!(page.lines.is_empty());
         assert_eq!(
-            page.next_cursor, None,
-            "an empty page keeps the caller's cursor"
+            page.next_cursor, cursor,
+            "an empty page echoes the caller's cursor so a poll loop can pass it straight back"
         );
         assert!(!page.has_more);
+
+        let page = transcript_page(&conn, "s", None, 2).unwrap();
+        assert_eq!(
+            page.lines.len(),
+            2,
+            "no cursor still starts from the beginning"
+        );
     }
 
     #[test]
@@ -369,6 +386,22 @@ mod tests {
         let hits = search(&conn, "budget", None, 10).unwrap().lines;
         let contents: Vec<_> = hits.iter().map(|h| h.content.as_str()).collect();
         assert_eq!(contents, ["the BUDGET again", "Budget review"]);
+    }
+
+    #[test]
+    fn search_folds_case_the_same_way_on_both_sides() {
+        // SQLite's lower() is ASCII-only. Folding the query with Unicode
+        // lowering would make "über" miss "ÜBER" yet hit "über"; folding both
+        // sides ASCII-only is at least consistent: an exact-case non-ASCII
+        // query always matches.
+        let conn = crate::db::test_db();
+        seed_session(&conn, "s", None, None);
+        seed_line(&conn, "l1", "s", "ÜBER alles", TS);
+
+        let hits = search(&conn, "ÜBER", None, 10).unwrap().lines;
+        assert_eq!(hits.len(), 1);
+        let hits = search(&conn, "alles", None, 10).unwrap().lines;
+        assert_eq!(hits.len(), 1);
     }
 
     #[test]

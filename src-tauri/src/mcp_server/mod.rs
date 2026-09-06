@@ -46,8 +46,11 @@ impl Drop for McpServerHandle {
 pub enum McpServerState {
     NotStarted,
     Listening(McpServerHandle),
-    /// The bind failed — almost always the port being held by another process.
-    /// The app keeps running without the endpoint.
+    /// The port is held by another process. The app keeps running without the
+    /// endpoint; the fix is on the user's side, so the UI names it.
+    PortBusy(String),
+    /// Anything else went wrong bringing the server up — the read-only
+    /// database connection, adopting the listener. Also non-fatal.
     Failed(String),
 }
 
@@ -180,6 +183,18 @@ mod tests {
             "{name} returned an error: {result:?}"
         );
         text_json(&result)
+    }
+
+    #[test]
+    fn bind_refuses_a_port_another_listener_holds() {
+        // The port-busy success criterion: a second darric must not take the
+        // port from the first, and the error must say which port so the chip's
+        // title is actionable.
+        let held = bind(0).unwrap();
+        let port = held.local_addr().unwrap().port();
+
+        let err = bind(port).unwrap_err().to_string();
+        assert!(err.contains(&format!("bind 127.0.0.1:{port}")), "{err}");
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

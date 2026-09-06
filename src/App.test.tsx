@@ -8,6 +8,7 @@ const MCP_LISTENING = {
   listening: true,
   port: 27842,
   url: "http://127.0.0.1:27842/mcp",
+  port_busy: false,
   error: null,
 };
 

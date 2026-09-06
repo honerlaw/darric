@@ -43,9 +43,7 @@ pub fn open_at(path: &Path) -> crate::error::Result<Connection> {
 pub fn open_read_only(path: &Path) -> crate::error::Result<Connection> {
     let conn = Connection::open_with_flags(
         path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY
-            | OpenFlags::SQLITE_OPEN_NO_MUTEX
-            | OpenFlags::SQLITE_OPEN_URI,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )?;
     Ok(conn)
 }

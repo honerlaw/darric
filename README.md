@@ -29,9 +29,14 @@ Four tools: `status` reports whether a recording is running and which devices ar
 lines, paged by a cursor so a second call during a live meeting returns only what has been said
 since; `search` finds where something was said across every recording.
 
-The server binds loopback only and reads through a read-only database connection, so nothing an
-agent does can write to your data or slow the recorder. If the chip reads `port busy`, another
-process holds port 27842; quit it and relaunch darric.
+The server binds loopback only and reads through its own read-only database connection, so
+nothing an agent does can write to your data or hold up the recorder's writes. Loopback means
+any account on this Mac can reach it, not just yours. If the chip reads `port busy`, another
+process holds port 27842; quit it and relaunch darric. If it reads `off`, hover it for the
+reason.
+
+Search is case-insensitive for ASCII letters only, and transcript lines come back in the order
+they were transcribed, which across two devices can differ from the order they were spoken.
 
 ## Downloads
 

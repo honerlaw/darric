@@ -70,24 +70,31 @@ pub fn run() {
 /// the endpoint; recording does not depend on it.
 fn start_mcp_server(app: &tauri::AppHandle) {
     let state = app.state::<AppState>();
-    let outcome = mcp_server::bind(mcp_server::DEFAULT_PORT).and_then(|listener| {
-        let reader = db::open_read_only(&db::path())?;
-        let reader = Arc::new(state::DbConn(std::sync::Mutex::new(reader)));
-        let live = Arc::new(mcp_commands::AppLiveStatus(app.clone()));
-        mcp_server::serve(listener, reader, live)
-    });
-    let mut slot = state
-        .mcp_server
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    *slot = match outcome {
-        Ok((handle, future)) => {
-            tauri::async_runtime::spawn(future);
-            mcp_server::McpServerState::Listening(handle)
-        }
+    let outcome = match mcp_server::bind(mcp_server::DEFAULT_PORT) {
         Err(e) => {
-            log::error!("[mcp_server] not started: {e}");
-            mcp_server::McpServerState::Failed(e.to_string())
+            log::error!("[mcp_server] not started, port busy: {e}");
+            mcp_server::McpServerState::PortBusy(e.to_string())
+        }
+        Ok(listener) => {
+            let served = db::open_read_only(&db::path()).and_then(|reader| {
+                let reader = Arc::new(state::DbConn(std::sync::Mutex::new(reader)));
+                let live = Arc::new(mcp_commands::AppLiveStatus(app.clone()));
+                mcp_server::serve(listener, reader, live)
+            });
+            match served {
+                Ok((handle, future)) => {
+                    tauri::async_runtime::spawn(future);
+                    mcp_server::McpServerState::Listening(handle)
+                }
+                Err(e) => {
+                    log::error!("[mcp_server] not started: {e}");
+                    mcp_server::McpServerState::Failed(e.to_string())
+                }
+            }
         }
     };
+    *state
+        .mcp_server
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = outcome;
 }

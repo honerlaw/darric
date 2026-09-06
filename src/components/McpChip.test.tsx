@@ -9,6 +9,7 @@ const LISTENING: McpServerStatus = {
   listening: true,
   port: 27842,
   url: "http://127.0.0.1:27842/mcp",
+  port_busy: false,
   error: null,
 };
 
@@ -16,7 +17,16 @@ const BUSY: McpServerStatus = {
   listening: false,
   port: 27842,
   url: null,
+  port_busy: true,
   error: "bind 127.0.0.1:27842: Address already in use (os error 48)",
+};
+
+const OFF: McpServerStatus = {
+  listening: false,
+  port: 27842,
+  url: null,
+  port_busy: false,
+  error: "database error: unable to open database file",
 };
 
 describe("McpChip", () => {
@@ -85,6 +95,16 @@ describe("McpChip", () => {
     expect(chip).toHaveTextContent("MCP · port busy");
     expect(chip).toHaveAttribute("title", BUSY.error);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("does not blame the port for a failure that is not the port", () => {
+    // "port busy" sends the user to free the port; a read-only open failure
+    // is not that, and the README's advice would be wrong for it.
+    render(<McpChip status={OFF} />);
+
+    const chip = screen.getByRole("status");
+    expect(chip).toHaveTextContent("MCP · off");
+    expect(chip).toHaveAttribute("title", OFF.error);
   });
 
   it("builds the command around the server's own url", () => {

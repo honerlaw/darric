@@ -15,6 +15,8 @@ pub struct McpServerStatus {
     /// The bound port, or the port that could not be bound.
     pub port: u16,
     pub url: Option<String>,
+    /// Another process holds the port — the one failure the user can fix.
+    pub port_busy: bool,
     pub error: Option<String>,
 }
 
@@ -31,18 +33,28 @@ pub async fn mcp_server_status(state: tauri::State<'_, AppState>) -> Result<McpS
             listening: true,
             port: handle.port,
             url: Some(handle.url()),
+            port_busy: false,
             error: None,
+        },
+        McpServerState::PortBusy(reason) => McpServerStatus {
+            listening: false,
+            port: crate::mcp_server::DEFAULT_PORT,
+            url: None,
+            port_busy: true,
+            error: Some(reason.clone()),
         },
         McpServerState::Failed(reason) => McpServerStatus {
             listening: false,
             port: crate::mcp_server::DEFAULT_PORT,
             url: None,
+            port_busy: false,
             error: Some(reason.clone()),
         },
         McpServerState::NotStarted => McpServerStatus {
             listening: false,
             port: crate::mcp_server::DEFAULT_PORT,
             url: None,
+            port_busy: false,
             error: None,
         },
     })

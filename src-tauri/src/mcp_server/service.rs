@@ -165,7 +165,8 @@ impl DarricService {
                        = what the machine played), `content`, and `recorded_at`. Lines come in \
                        transcription order, which can differ from speech order across devices — \
                        sort by `recorded_at` if that matters. Pass `next_cursor` back as `after` \
-                       to fetch only what has landed since, including during a live recording. \
+                       to fetch only what has landed since, including during a live recording; \
+                       when nothing new has landed, `next_cursor` echoes the one you passed. \
                        Cursors are valid only while darric stays running; do not persist them."
     )]
     async fn get_transcript(
@@ -196,7 +197,7 @@ impl DarricService {
     }
 
     #[tool(
-        description = "Case-insensitive substring search across every recording. Returns `lines` \
+        description = "Substring search across every recording, case-insensitive for ASCII. Returns `lines` \
                        whose spoken content matched (newest first, each with its `session_id` and \
                        `seq`) and `sessions` whose topic matched. Device names are not searched. \
                        To read around a hit, call `get_transcript` with `after` set a few below \
@@ -253,4 +254,45 @@ fn json_result<T: serde::Serialize>(value: &T) -> Result<CallToolResult, McpErro
 
 fn internal<E: std::fmt::Display>(err: E) -> McpError {
     McpError::internal_error(err.to_string(), None)
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+    use std::sync::Mutex;
+
+    struct NoEngine;
+
+    impl LiveStatus for NoEngine {
+        fn snapshot(&self) -> LiveSnapshot {
+            LiveSnapshot {
+                session_id: None,
+                devices: Vec::new(),
+                dropped_segments: 0,
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn status_with_no_engine_reports_not_recording() {
+        let service = DarricService::new(
+            Arc::new(DbConn(Mutex::new(crate::db::test_db()))),
+            Arc::new(NoEngine),
+        );
+
+        let result = service.status().await.unwrap();
+        let text = result
+            .content
+            .iter()
+            .find_map(|c| c.as_text().map(|t| t.text.clone()))
+            .expect("a text block");
+        let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+
+        assert_eq!(json["recording"], false);
+        assert!(json["session"].is_null());
+        assert_eq!(json["devices"].as_array().unwrap().len(), 0);
+        assert_eq!(json["dropped_segments"], 0);
+    }
 }

@@ -12,9 +12,10 @@ interface McpChipProps {
 }
 
 /**
- * The header's MCP indicator: the port when listening, "port busy" when the
- * bind failed. Clicking a listening chip copies the `claude mcp add` command,
- * which is the whole setup for a Claude Code user.
+ * The header's MCP indicator: the port when listening, "port busy" when
+ * another process holds it, "off" for any other failure — with the reason as
+ * the title either way. Clicking a listening chip copies the `claude mcp add`
+ * command, which is the whole setup for a Claude Code user.
  */
 export function McpChip({ status }: McpChipProps): React.JSX.Element | null {
   const [copied, setCopied] = useState(false);
@@ -41,7 +42,7 @@ export function McpChip({ status }: McpChipProps): React.JSX.Element | null {
         className={`flex h-[24px] items-center gap-[6px] rounded-full border border-line px-[10px] ${label}`}
       >
         <span className="h-[6px] w-[6px] rounded-full bg-danger" />
-        MCP · port busy
+        {status.port_busy ? "MCP · port busy" : "MCP · off"}
       </span>
     );
   }

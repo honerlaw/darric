@@ -16,6 +16,29 @@ const BASE_PROPS = {
   onResume: (): void => undefined,
 };
 
+describe("Header MCP chip", () => {
+  it("renders the chip once the server status is known", () => {
+    // McpChip has its own tests; this pins the wiring — a dropped
+    // `mcpStatus` prop would pass every other suite with the chip hidden.
+    render(
+      <Header
+        {...BASE_PROPS}
+        mcpStatus={{
+          listening: true,
+          port: 27842,
+          url: "http://127.0.0.1:27842/mcp",
+          port_busy: false,
+          error: null,
+        }}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: /connects to darric/ })).toHaveTextContent(
+      "MCP · :27842",
+    );
+  });
+});
+
 describe("Header record button", () => {
   it("reports the model download instead of showing a bare Starting…", () => {
     render(<Header {...BASE_PROPS} downloadProgress={42} />);

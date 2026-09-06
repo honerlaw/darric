@@ -53,6 +53,8 @@ export interface McpServerStatus {
   /** The bound port, or the port that could not be bound. */
   port: number;
   url: string | null;
+  /** Another process holds the port — the one failure the user can fix. */
+  port_busy: boolean;
   /** Why the server is not listening, when it is not. */
   error: string | null;
 }
