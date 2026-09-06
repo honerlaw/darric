@@ -89,6 +89,17 @@ This starts the Vite dev server and the Tauri app together. On first launch, Dar
 automatically download the Whisper model (~1.6 GB) to `~/Library/Application Support/darric/`.
 This only happens once.
 
+The model comes from this repository's
+[`models` release](https://github.com/honerlaw/darric/releases/tag/models) rather than from
+Hugging Face, because some corporate networks block `huggingface.co` while anything that can
+install the app already reaches GitHub's release assets. The file is a byte-exact mirror of
+[`ggerganov/whisper.cpp`](https://huggingface.co/ggerganov/whisper.cpp)'s
+`ggml-large-v3-turbo.bin` (MIT), and the app checks the download's SHA-256 against
+`1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69` before using it, so a
+truncated or swapped download is refused rather than cached; the next Record press or launch
+downloads it again. If neither host is reachable, copy the file from another machine into
+`~/Library/Application Support/darric/ggml-large-v3-turbo.bin` and the app will use it as is.
+
 The download starts on its own as soon as the app opens, and a progress bar under the header
 reports it. Recording is unavailable until it finishes — the Record button reads
 `Downloading <n>%` while it runs — because there is nothing to transcribe with yet. If the

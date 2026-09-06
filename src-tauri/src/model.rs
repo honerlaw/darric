@@ -1,5 +1,6 @@
 use crate::error::{AppError, Result};
 use futures_util::StreamExt;
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
 use tauri::{AppHandle, Emitter};
@@ -10,9 +11,18 @@ use tokio::sync::Mutex;
 // [SPEAKER_TURN] tokens for speaker attribution, which is now derived from the
 // originating device instead. Turbo is multilingual and markedly more accurate
 // at comparable speed on Apple Silicon with Metal.
+//
+// Served from this repository's `models` GitHub Release rather than from
+// Hugging Face: some corporate networks block huggingface.co outright, while
+// anything that can install the app already reaches GitHub's release assets.
+// The asset is a byte-exact mirror of ggerganov/whisper.cpp's file (MIT), and
+// `MODEL_SHA256` pins it, so a swapped or truncated download is refused.
 const MODEL_URL: &str =
-    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin";
+    "https://github.com/honerlaw/darric/releases/download/models/ggml-large-v3-turbo.bin";
 const MODEL_FILENAME: &str = "ggml-large-v3-turbo.bin";
+/// SHA-256 of the exact bytes `MODEL_URL` serves. Matches Hugging Face's LFS
+/// object hash for the upstream file (`x-linked-etag`).
+const MODEL_SHA256: &str = "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69";
 
 /// Sentinel for `DOWNLOAD_PCT` meaning "no download in flight".
 const NOT_DOWNLOADING: i64 = -1;
@@ -117,10 +127,12 @@ async fn download(app: &AppHandle, path: &Path) -> Result<()> {
     let mut stream = response.bytes_stream();
     let mut downloaded: u64 = 0;
     let mut last_reported_pct = 0u32;
+    let mut hasher = Sha256::new();
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| AppError::Audio(format!("download error: {e}")))?;
         downloaded += chunk.len() as u64;
+        hasher.update(&chunk);
         file.write_all(&chunk).await?;
 
         // `checked_div` yields `None` when `total` is 0 (server sent no
@@ -146,7 +158,107 @@ async fn download(app: &AppHandle, path: &Path) -> Result<()> {
 
     file.flush().await?;
     drop(file);
+
+    // Both checks run before the rename so that a bad download never reaches
+    // the cached path: `ensure_model` accepts any existing file there, so a
+    // corrupt one would be trusted on every later launch with no way to recover
+    // from inside the app. Returning early here lets `ensure_model`'s failure
+    // path remove the `.tmp` and report the error.
+    check_length(total, downloaded)?;
+    verify_digest(MODEL_SHA256, &format!("{:x}", hasher.finalize()))?;
+    log::info!("[model] checksum verified: sha256 {MODEL_SHA256}");
+
     tokio::fs::rename(&tmp, path).await?;
 
     Ok(())
+}
+
+/// Rejects a download whose length disagrees with the server's Content-Length.
+///
+/// A stream can end short without a transport error, which the checksum would
+/// also catch — but this message says what actually happened. `total == 0`
+/// means the server sent no Content-Length, so there is nothing to compare.
+fn check_length(total: u64, downloaded: u64) -> Result<()> {
+    if total == 0 || downloaded == total {
+        return Ok(());
+    }
+    let what = if downloaded < total {
+        "truncated"
+    } else {
+        "longer than advertised"
+    };
+    Err(AppError::Audio(format!(
+        "model download {what}: got {downloaded} of {total} bytes"
+    )))
+}
+
+/// Accepts a download only when its lower-hex SHA-256 is exactly `expected_hex`.
+fn verify_digest(expected_hex: &str, actual_hex: &str) -> Result<()> {
+    if actual_hex == expected_hex {
+        Ok(())
+    } else {
+        Err(AppError::Audio(format!(
+            "model download failed checksum: expected sha256 {expected_hex}, got {actual_hex}"
+        )))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const DIGEST: &str = "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69";
+
+    fn audio_message(result: Result<()>) -> String {
+        match result {
+            Err(AppError::Audio(msg)) => msg,
+            other => panic!("expected an AppError::Audio, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn verify_digest_accepts_a_matching_hash() {
+        assert!(verify_digest(DIGEST, DIGEST).is_ok());
+    }
+
+    #[test]
+    fn verify_digest_rejects_a_different_hash() {
+        let msg = audio_message(verify_digest(DIGEST, &"0".repeat(64)));
+        assert!(msg.contains("checksum") && msg.contains(DIGEST));
+    }
+
+    #[test]
+    fn verify_digest_is_case_sensitive_because_the_digest_is_formatted_lowercase() {
+        assert!(verify_digest(DIGEST, &DIGEST.to_uppercase()).is_err());
+    }
+
+    #[test]
+    fn pinned_hash_is_a_lowercase_sha256_hex_string() {
+        assert_eq!(MODEL_SHA256.len(), 64);
+        assert!(MODEL_SHA256
+            .chars()
+            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)));
+    }
+
+    #[test]
+    fn check_length_skips_when_the_server_sent_no_content_length() {
+        assert!(check_length(0, 12_345).is_ok());
+    }
+
+    #[test]
+    fn check_length_accepts_an_exact_match() {
+        assert!(check_length(1_624_555_275, 1_624_555_275).is_ok());
+    }
+
+    #[test]
+    fn check_length_names_a_short_stream_as_truncated() {
+        let msg = audio_message(check_length(100, 60));
+        assert!(msg.contains("truncated") && msg.contains("60 of 100"));
+    }
+
+    #[test]
+    fn check_length_names_an_over_long_stream_distinctly() {
+        let msg = audio_message(check_length(100, 140));
+        assert!(msg.contains("longer than advertised") && msg.contains("140 of 100"));
+    }
 }
