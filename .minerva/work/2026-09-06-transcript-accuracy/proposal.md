@@ -1,7 +1,7 @@
 # Proposal: transcript-accuracy
 
 **Date**: 2026-09-06
-**Status**: Draft
+**Status**: Shipped (2026-09-06)
 
 ## Goal
 
@@ -142,7 +142,9 @@ fixture is synthesized with `say` + `afconvert` under a bounded child
    the user to make one recording in the app with nothing playing and confirm that no `output`
    lines appear; phase 2 does not ship until that confirmation is recorded in the scratchpad,
    and a failed confirmation is a phase-1 defect to fix before phase 2. (Reworded by the
-   2026-09-06 replan; originally "verified in the running app".)
+   2026-09-06 replan; originally "verified in the running app". The confirmation gate was
+   waived by the user on 2026-09-06 — "we can always fix forward" — and the in-app check runs
+   on main with both phases merged.)
 3. Sixty seconds after a capture device disappears its row reads "failed", not "retrying", and
    the supervisor thread has exited; `should_give_up` has a unit test.
 4. After migration 011 no `settings` row has a key beginning `ai.`; a Rust test proves it.
@@ -165,7 +167,8 @@ fixture is synthesized with `say` + `afconvert` under a bounded child
    segment, flush floor, capture give-up, migration 011, README. Criteria 1, 2, 3, 4, 8a.
 2. **utterance-segmentation** — pause-based segmenter, capture-time `recorded_at`,
    windowed-sinc resampler, MCP/README wording. Criteria 5, 6, 7, 8b. Precondition: the
-   criterion-2 user confirmation from phase 1 is recorded in the scratchpad.
+   criterion-2 user confirmation from phase 1 is recorded in the scratchpad (waived by the
+   user on 2026-09-06; see the criterion).
 
 ## Open Questions
 
