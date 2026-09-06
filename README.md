@@ -13,8 +13,9 @@ Built with Tauri 2, Rust, React, and TypeScript.
 
 ### How transcription works
 
-Audio from each device is resampled to 16 kHz through a band-limited filter (a linear resampler
-used to fold everything above 8 kHz down into the speech band) and cut into segments at pauses
+Audio from each device is resampled to 16 kHz through a band-limited filter (the previous
+linear resampler folded everything above 8 kHz down into the speech band) and cut into segments
+at pauses
 in speech: a segment ends after 400 ms of quiet once it holds at least two seconds, and at
 25 seconds regardless, so Whisper gets whole utterances rather than fixed eight-second slices.
 Each segment is transcribed on its own. Before a segment reaches Whisper it goes through a voice

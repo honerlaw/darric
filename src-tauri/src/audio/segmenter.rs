@@ -49,6 +49,12 @@ const FLOOR_RISE: f32 = 1.02;
 /// reclassified within about half a minute.
 const FLOOR_CREEP: f32 = 1.002;
 
+/// A chunk arriving later than the buffered audio accounts for, by more than
+/// this, is a delivery gap — a stream rebuilt after a failure, callbacks
+/// dropped under load — and the clock is re-anchored to it rather than left
+/// extrapolating from the first callback of the session.
+const GAP_TOLERANCE: ChronoDuration = ChronoDuration::milliseconds(100);
+
 /// One segment: its 16 kHz samples and when its first sample arrived.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Segment {
@@ -106,11 +112,9 @@ impl Segmenter {
         if chunk.is_empty() {
             return Vec::new();
         }
-        if self.buf.is_empty() {
-            self.started_at = Some(now - duration_of(chunk.len()));
-        }
+        self.anchor(chunk.len(), now);
         self.buf.extend_from_slice(chunk);
-        self.classify_new_frames();
+        self.classify_new_frames(true);
 
         let mut out = Vec::new();
         loop {
@@ -123,13 +127,13 @@ impl Segmenter {
                 break;
             }
             if self.buf.len() >= self.min_samples && self.trailing_silence >= self.pause_frames {
-                // Cut where the pause began; the pause itself stays, so the next
-                // segment opens on the silence that ended this one rather than
-                // on a clipped syllable.
+                // Cut so that exactly one pause stays behind: the next segment
+                // opens on the silence that ended this one rather than on a
+                // clipped syllable. Silence that accumulated while the buffer
+                // was still short of the minimum goes with this segment.
+                // `has_speech` guarantees a speech frame precedes the trailing
+                // pause, so the cut is never zero.
                 let cut = self.classified - self.pause_frames * FRAME_SAMPLES;
-                if cut == 0 {
-                    break;
-                }
                 out.push(self.take(cut));
                 continue;
             }
@@ -154,8 +158,27 @@ impl Segmenter {
         self.buf.len()
     }
 
-    /// Classify every whole frame not yet looked at, updating the floor.
-    fn classify_new_frames(&mut self) {
+    /// Set or re-anchor the buffer's start time for a chunk of `len` samples
+    /// whose last sample arrived at `now`.
+    fn anchor(&mut self, len: usize, now: DateTime<Utc>) {
+        let chunk_start = now - duration_of(len);
+        match self.started_at {
+            None => self.started_at = Some(chunk_start),
+            Some(started) => {
+                let expected = started + duration_of(self.buf.len());
+                if chunk_start - expected > GAP_TOLERANCE {
+                    // Everything buffered is older than the gap; keep its
+                    // duration and slide it up to end where this chunk begins.
+                    self.started_at = Some(chunk_start - duration_of(self.buf.len()));
+                }
+            }
+        }
+    }
+
+    /// Classify every whole frame not yet looked at. The floor is updated only
+    /// on the first pass over a frame; re-deriving state after a cut passes
+    /// `false` so the retained pause does not move it twice.
+    fn classify_new_frames(&mut self, update_floor: bool) {
         while self.classified + FRAME_SAMPLES <= self.buf.len() {
             let frame = &self.buf[self.classified..self.classified + FRAME_SAMPLES];
             let level = rms(frame);
@@ -163,14 +186,18 @@ impl Segmenter {
             if level > threshold {
                 self.has_speech = true;
                 self.trailing_silence = 0;
-                self.floor = level.min(self.floor * FLOOR_CREEP);
+                if update_floor {
+                    self.floor = level.min(self.floor * FLOOR_CREEP);
+                }
             } else {
                 self.trailing_silence += 1;
-                self.floor = if level < self.floor {
-                    level.max(FLOOR_MIN)
-                } else {
-                    level.min(self.floor * FLOOR_RISE)
-                };
+                if update_floor {
+                    self.floor = if level < self.floor {
+                        level.max(FLOOR_MIN)
+                    } else {
+                        level.min(self.floor * FLOOR_RISE)
+                    };
+                }
             }
             self.classified += FRAME_SAMPLES;
         }
@@ -191,7 +218,7 @@ impl Segmenter {
         self.classified = 0;
         self.trailing_silence = 0;
         self.has_speech = false;
-        self.classify_new_frames();
+        self.classify_new_frames(false);
         Segment {
             samples,
             captured_at,
@@ -254,8 +281,14 @@ mod tests {
 
     /// Feed `stream` in 10 ms chunks with a clock that advances with the audio.
     fn feed(seg: &mut Segmenter, stream: &[f32]) -> Vec<Segment> {
+        feed_from(seg, stream, t0())
+    }
+
+    /// The same, starting the clock at `start` — for a second feed that must
+    /// continue the first one's timeline rather than restart it.
+    fn feed_from(seg: &mut Segmenter, stream: &[f32], start: DateTime<Utc>) -> Vec<Segment> {
         let mut out = Vec::new();
-        let mut now = t0();
+        let mut now = start;
         for chunk in stream.chunks(160) {
             now += duration_of(chunk.len());
             out.extend(seg.push_at(chunk, now));
@@ -328,6 +361,38 @@ mod tests {
         assert!(started.is_empty());
         let tail = seg.flush().expect("buffered speech");
         assert!(tail.samples.len() <= seconds(3) + 6_400);
+    }
+
+    #[test]
+    fn speech_after_a_long_silence_is_stamped_when_it_was_heard() {
+        // Sixty seconds of nothing, then three seconds of speech: the segment
+        // starts at most one pause before the speech, not at the session start.
+        let mut seg = Segmenter::new();
+        assert!(feed(&mut seg, &quiet(seconds(60))).is_empty());
+        let after_silence = t0() + duration_of(seconds(60));
+        assert!(feed_from(&mut seg, &loud(seconds(3)), after_silence).is_empty());
+        let tail = seg.flush().expect("buffered speech");
+        assert!(tail.captured_at >= after_silence - duration_of(6_400));
+        assert!(tail.captured_at <= after_silence);
+    }
+
+    #[test]
+    fn a_delivery_gap_re_anchors_the_clock() {
+        // Speech, a pause (cut), then nothing arrives for thirty seconds — a
+        // stream being rebuilt — then speech again. The second segment must be
+        // stamped when its audio arrived, not extrapolated from the first.
+        let mut stream = loud(seconds(2));
+        stream.extend(quiet(9_600));
+        let mut seg = Segmenter::new();
+        let first = feed(&mut seg, &stream);
+        assert_eq!(first.len(), 1);
+        let resumed = t0() + duration_of(stream.len()) + ChronoDuration::seconds(30);
+        let mut more = loud(seconds(3));
+        more.extend(quiet(9_600));
+        let second = feed_from(&mut seg, &more, resumed);
+        assert_eq!(second.len(), 1);
+        // The retained 400 ms pause slides up to end where the new audio began.
+        assert_eq!(second[0].captured_at, resumed - duration_of(6_400));
     }
 
     #[test]

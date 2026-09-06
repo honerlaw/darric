@@ -20,6 +20,8 @@
 - [decided] review triage (phase 1): 7 FIX / 1 SUGGEST (already promoted) / 3 IGNORE, none contested (solo gate); no load-bearing divergence, no replan-vs-FIX
 - [decided] promote (phase 1, Mode B): four knowledge entries — VAD constraint, silence bug, tap-permission reference (contradicts the 2026-09-05 entry), say/stdin reference; Mode A deferred to the final phase; no TODOs cleared the deferral bar
 - [decided] ship + cleanup (phase 1): PR #49 merged (squash) after one CI lint fix; reconciliation owned by CI (knowledge-reconcile.yml, ran green, four entries catalogued on main); worktree teardown deferred — phase 2 outstanding; phase-2 branch cut from main
+- [reviewed — clean] completion verification (phase 2): Verifier accept on criteria 5, 6, 7, 8b; re-ran the pipeline test itself; disclosed deviations (MIN 2 s, 64 taps) judged necessary, not gaming
+- [decided] review triage (phase 2): 7 FIX / 0 SUGGEST / 0 IGNORE, none contested (solo gate); no load-bearing divergence
 
 ## Work notes 2026-09-06 (phase 1)
 
@@ -101,3 +103,17 @@ Review fixes: source.rs — `supervise` refactor, `STABLE_AFTER`; vad.rs — `WR
 - VAD `speech_pad_ms` raised from whisper.cpp's 30 to 100: one room-microphone run came back
   "Quarterly numbers…" without "The"; the next run at 30 ms was verbatim, so the loss is
   acoustic variance, and the extra 140 ms per region is cheap insurance.
+
+## Review triage 2026-09-06 (phase 2)
+
+Mode: local-diff (fresh-context subagent; no PR yet). Findings from the code review; the minerva audit found no spec or knowledge violation beyond the two disclosed deviations already in the phase-2 work notes.
+
+- [FIXED] #1 high transcription/vad.rs — the 100 ms VAD padding described in the notes was never in the commit (a patch that reported success had not written the file) → `vad_params()` with `SPEECH_PAD_MS = 100`.
+- [FIXED] #2 high audio/segmenter.rs — `started_at` anchored only on an empty buffer, so after a delivery gap every stamp was extrapolated from the session's first callback → `anchor()` re-anchors when a chunk arrives more than 100 ms later than the buffered audio accounts for; test `a_delivery_gap_re_anchors_the_clock`.
+- [FIXED] #3 medium audio/segmenter.rs — no test of the stamp after leading-silence trimming with a continuous clock → `feed_from` helper and `speech_after_a_long_silence_is_stamped_when_it_was_heard`.
+- [FIXED] #4 low audio/segmenter.rs — misleading "cut where the pause began" comment and an unreachable `cut == 0` guard → comment rewritten, guard removed.
+- [FIXED] #5 low audio/segmenter.rs — `take` re-classified the retained pause with floor updates, compounding the rise → `classify_new_frames(update_floor)`; the re-derivation passes `false`.
+- [FIXED] #6 low README.md — "a linear resampler used to fold…" read as present tense → "the previous linear resampler folded…".
+- [FIXED] #7 low db/sessions.rs + src/hooks/useTranscript.ts — stale comment about why rowid and timestamp order diverge; and the live view appended lines in arrival order while a reload sorts by `recorded_at`, so a reopened session could reorder what was shown live → comment rewritten; live lines are inserted by `recorded_at` (`insertByRecordedAt`, test "places a line by its capture time, not its arrival").
+
+Review fixes: vad.rs — speech pad; segmenter.rs — anchor(), floor re-derivation, comments, two tests; sessions.rs — comment; README; useTranscript.ts + test.

@@ -6,6 +6,22 @@ import type { TranscriptChunk, TranscriptLine } from "../types";
 // listener alive this long after recording ends so the chunk still lands.
 const FLUSH_LINGER_MS = 20_000;
 
+/**
+ * Place a live line where its capture time puts it, after any line stamped at
+ * the same instant. Lines arrive in the order whisper finished them, which
+ * across two devices is not the order they were spoken; a reload sorts by
+ * `recorded_at`, and the live view must not show a different order.
+ */
+function insertByRecordedAt(prev: TranscriptLine[], line: TranscriptLine): TranscriptLine[] {
+  let at = prev.length;
+  while (at > 0) {
+    const before = prev[at - 1];
+    if (before === undefined || before.recorded_at <= line.recorded_at) break;
+    at -= 1;
+  }
+  return [...prev.slice(0, at), line, ...prev.slice(at)];
+}
+
 export function useTranscript(sessionId: string | null, isLive: boolean): TranscriptLine[] {
   const [lines, setLines] = useState<TranscriptLine[]>([]);
   const sessionRef = useRef(sessionId);
@@ -44,9 +60,8 @@ export function useTranscript(sessionId: string | null, isLive: boolean): Transc
       // identity on the payload covers both without depending on which render
       // ran what.
       if (chunk.session_id !== sessionRef.current) return;
-      setLines((prev) => [
-        ...prev,
-        {
+      setLines((prev) =>
+        insertByRecordedAt(prev, {
           seq: null,
           id: crypto.randomUUID(),
           session_id: chunk.session_id,
@@ -55,8 +70,8 @@ export function useTranscript(sessionId: string | null, isLive: boolean): Transc
           direction: chunk.direction,
           content: chunk.content,
           recorded_at: chunk.recorded_at,
-        },
-      ]);
+        }),
+      );
     };
 
     if (isLive) {

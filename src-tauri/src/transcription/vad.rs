@@ -93,7 +93,7 @@ impl Gate {
     pub fn speech(&mut self, samples: &[f32]) -> Result<Option<Vec<f32>>> {
         let segments = self
             .ctx
-            .segments_from_samples(WhisperVadParams::default(), samples)
+            .segments_from_samples(vad_params(), samples)
             .map_err(|e| AppError::Transcription(format!("voice activity detection: {e}")))?;
 
         let mut out = Vec::new();
@@ -110,6 +110,19 @@ impl Gate {
         }
         Ok(if out.is_empty() { None } else { Some(out) })
     }
+}
+
+/// Padding kept on each side of a detected speech region, in milliseconds.
+/// whisper.cpp's default is 30; a little more costs 140 ms of audio per region
+/// and protects the onset of an utterance's first word through a room
+/// microphone.
+const SPEECH_PAD_MS: i32 = 100;
+
+/// whisper.cpp's defaults except for the padding.
+fn vad_params() -> WhisperVadParams {
+    let mut p = WhisperVadParams::default();
+    p.set_speech_pad(SPEECH_PAD_MS);
+    p
 }
 
 /// A detector timestamp in centiseconds as an index into a buffer of `len`.
