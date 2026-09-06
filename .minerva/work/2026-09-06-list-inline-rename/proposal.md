@@ -1,7 +1,7 @@
 # Proposal: list-inline-rename
 
 **Date**: 2026-09-06
-**Status**: Draft
+**Status**: Shipped (2026-09-06)
 
 ## Goal
 
@@ -21,31 +21,49 @@ shared error-bar handling. This is a UI affordance, not a feature.
 ## Approach
 
 **`RecordingList` owns the editor; `App` supplies the write.** No backend change, no new
-dependency, and the pane's existing rename is untouched.
+dependency. What shipped:
 
-- `RecordingList` gains an `onRename: (id: string, topic: string) => void` prop and one piece
-  of state, `editing: { id, draft } | null`.
-- The row's select button gets `onDoubleClick`, which opens the editor with the current topic as
-  the draft (`""` for an untitled recording, never the placeholder text). The single click still
-  selects — a double-click fires two selects first, which is harmless.
-- While `editing.id` matches a row, that row renders an `<input>` in place of the name, with
-  `aria-label="Rename <label>"`, auto-focused with its text selected so typing replaces the name.
-- The editor closes on a single path, `blur`: Enter and Escape both call `blur()` on the input,
-  Escape after setting a cancel flag. The blur handler either commits or discards, and because
-  it runs exactly once per edit, a commit cannot double-fire (Enter's commit followed by the
-  unmount's blur) and a cancel cannot be undone by a trailing blur.
+- `RecordingList` has an `onRename: (id: string, topic: string) => void` prop and one piece of
+  state, `editing: { id, draft } | null`. The row's select button opens the editor on
+  `onDoubleClick` with the stored topic as the draft — `""` for an untitled recording, never the
+  "Untitled recording" placeholder, which a stray Enter would otherwise store as a real name.
+  The single click still selects; a double-click's two selects hit `setViewingSessionId` with
+  the same id and React bails out.
+- While `editing.id` matches a row, that row renders an `<input>` in place of the name,
+  `aria-label="Rename <label>"`, auto-focused with its text selected.
+- **Blur is the single close path.** Enter and Escape both call `blur()` on the input; Escape
+  sets `cancelEditRef` first. The blur handler reads and resets the flag, then commits or
+  discards. One event per edit means a commit cannot fire twice and a cancel cannot be undone by
+  a trailing blur. Enter and Escape are ignored while `nativeEvent.isComposing` is set, so
+  confirming an IME candidate does not commit half a word; the same one-line guard was added to
+  the pane's title editor.
 - Commit sends the trimmed draft to `onRename` only when it is non-empty **and** differs from
-  the current topic; otherwise the editor just closes. Empty-and-different is treated as
-  "abandon", matching the pane.
-- `App` generalises its existing `handleRename` to take an id, wires the list's `onRename` to
-  it, and keeps the pane's callback as the `viewingSessionId` case of the same function.
+  the stored topic. An empty draft is an abandoned edit, matching the pane.
+- `App.handleRename` now takes an id and sends the trimmed topic to `useSession.update`; the
+  list passes it directly and the pane's callback supplies `viewingSessionId`. The old
+  empty-to-`undefined` arm was unreachable and is gone.
 
-Considered and rejected:
+### Tests
 
-- _Extract a shared inline-title editor used by both the pane and the list._ Cleaner, but it
-  rewrites working pane code for a ~30 line saving and widens a change that should stay small.
-- _Double-click selects the row and opens the pane's heading editor._ Keeps one editor, but
-  the input appears far from where the user double-clicked and does not match the request.
+Eleven `RecordingList` tests cover: double-click opens, single click does not; untitled seeds
+`""`; Enter commits once; blur commits; Escape abandons; empty and unchanged write nothing; a
+cancelled edit does not poison the next commit; commit on an untitled recording; the editor
+survives a `sessions` refresh; IME Enter is ignored; and Enter routes through blur. That last
+one stubs `HTMLElement.prototype.blur` because jsdom fires no blur on unmount, so the
+"exactly once" count alone could not distinguish the shipped design from a regression that
+commits on Enter directly ([[2026-09-06-constraint-jsdom-fires-no-blur-on-unmount]]). One
+`App` test drives a rename from the sidebar through a mocked `update_session` and asserts the
+payload and the refreshed name. Every guard was mutation-tested.
+
+### Incidental
+
+`main` was red on `npm run format` because the reconcile PR (#43) appended a `## Related`
+block to a knowledge entry without a blank line after the heading. Restored here so CI could go
+green; the workflow gap is #44.
+
+Considered and rejected: a shared inline-title editor for both the pane and the list (rewrites
+working pane code for a small saving); routing the double-click into the pane's heading editor
+(the input would appear far from the click).
 
 ## Success criteria
 
@@ -58,6 +76,10 @@ Considered and rejected:
 - Selecting a row and renaming from the pane heading still work; all existing tests pass
   unmodified.
 - `npm run check` passes with no new lint suppressions.
+
+## Deferred work
+
+- #44 — knowledge reconciliation appends `## Related` blocks that Prettier rejects, leaving main red on format (priority: medium)
 
 ## Open Questions
 
