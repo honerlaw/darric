@@ -1,0 +1,195 @@
+name: Release
+
+# Cuts a prerelease for every merge to main that can change the shipped binary.
+#
+# Reconciliation merges never reach this workflow at all: knowledge-reconcile.yml
+# opens and merges its own PR with GITHUB_TOKEN, and GitHub creates no workflow
+# run for anything GITHUB_TOKEN does, so that merge fires no push event on main
+# (.minerva/knowledge/2026-09-05-reference-github-token-actions-trigger-no-workflows.md).
+# The paths-ignore below states the exclusion explicitly rather than leaving it
+# resting on that side effect -- the same entry names swapping GITHUB_TOKEN for a
+# PAT as a real option -- and it also covers a human-merged PR touching only
+# .minerva/ or prose.
+#
+# That filter is a deny-list on purpose. An allow-list of shippable directories
+# fails by silently cutting no release when a new source path appears; a
+# deny-list fails by cutting one redundant release. No code file can ever match
+# these patterns.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - ".minerva/**"
+      - "**/*.md"
+      - "LICENSE"
+  # A push-only workflow cannot be validated before it merges. Scoped to this
+  # one file, a PR editing it builds both architectures for real while the
+  # release job stays suppressed.
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+  # Manual re-cut, for a run lost to an infra blip.
+  workflow_dispatch:
+
+# A real run is keyed by commit, not by branch. A single ref-level group looks
+# like it serialises releases, but GitHub keeps only one run pending per group:
+# a third merge landing during the first one's build evicts the second's pending
+# run, and that merge never gets a release at all. Per-commit groups also put a
+# manual re-cut in the same group as the push run for that commit, so the two
+# queue instead of racing for the same tag.
+#
+# Dry runs on a workflow-editing PR key by PR ref instead, so a new push
+# supersedes the previous run rather than queueing behind it.
+concurrency:
+  group: release-${{ github.event_name == 'pull_request' && format('pr-{0}', github.ref) || format('sha-{0}', github.sha) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Read-only by default: the build job runs `npm ci` and cmake/whisper.cpp build
+# scripts, and has no reason to hold a token that can write to the repo. Only
+# the release job is granted contents: write.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # One native runner per architecture. whisper-rs is built with the
+          # `metal` feature and compiles whisper.cpp through cmake, so
+          # cross-compiling arm64 -> x86_64 is the largest build risk available
+          # here; a native runner per arch removes it entirely.
+          #
+          # macos-13 -- the label to reach for first -- was retired 2025-12-04.
+          # macos-15-intel is the current, and last, x86_64 image; it is
+          # supported through Fall 2027, after which this row comes out.
+          - runner: macos-15
+            arch: aarch64
+          - runner: macos-15-intel
+            arch: x64
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure cmake
+        run: cmake --version || brew install cmake
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # rust-cache keys on runner.os, which is "macOS" for both legs -- without
+      # the architecture in the key the two caches collide.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.arch }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # The CPU baseline is NOT set here. src-tauri/.cargo/config.toml declares
+      # CMAKE_TOOLCHAIN_FILE for every cargo invocation, so a local build, the
+      # check.yml jobs and this release build all compile ggml identically --
+      # one declaration instead of a CI-only override that local builds silently
+      # diverge from.
+      - run: npm run tauri:build
+
+      # if-no-files-found: error -- a leg that produced no DMG has to fail the
+      # job. The alternative is a green run that cuts a release missing half its
+      # downloads, or all of them.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmg-${{ matrix.arch }}
+          path: src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    # Never on a pull request, and never for a workflow_dispatch aimed at some
+    # other branch -- the tag asserts "this is main", so it has to be.
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # gh needs repo context, and the commit subject below has to come from a
+      # checkout that knows this sha.
+      - uses: actions/checkout@v4
+
+      # upload-artifact v4 rejects a duplicate artifact name with a 409, so each
+      # leg uploaded under its own; merge-multiple lands them in one directory.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: dmg-*
+          merge-multiple: true
+          path: dmg
+
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="main-${GITHUB_SHA:0:7}"
+
+          # Both legs, or nothing. download-artifact only *warns* when its
+          # pattern matches nothing, so re-running just this job after one of
+          # the two artifacts had expired would otherwise clobber the release
+          # with a single architecture and still go green -- the same silent
+          # half-release that if-no-files-found guards against upstream.
+          found=$(find dmg -type f -name '*.dmg' | wc -l | tr -d ' ')
+          if [ "$found" -ne 2 ]; then
+            echo "::error::expected 2 DMGs, found $found"
+            exit 1
+          fi
+
+          {
+            echo "Automated build of \`$GITHUB_SHA\`."
+            echo
+            git log -1 --pretty=%s "$GITHUB_SHA"
+            echo
+            echo "| Download | For |"
+            echo "| --- | --- |"
+            echo "| \`Darric_*_aarch64.dmg\` | Apple Silicon |"
+            echo "| \`Darric_*_x64.dmg\` | Intel |"
+            echo
+            echo "These builds are unsigned. macOS quarantines an unsigned app downloaded"
+            echo "through a browser and reports \"Darric is damaged and can't be opened\" --"
+            echo "which is a quarantine flag, not a corrupt download. Clear it after copying"
+            echo "the app into /Applications:"
+            echo
+            echo '```sh'
+            echo "xattr -d com.apple.quarantine /Applications/Darric.app"
+            echo '```'
+          } >release-notes.md
+
+          # --target pins the tag to the commit that was actually built. Without
+          # it the tag lands on whatever is at the tip of main when this runs,
+          # and a macOS build takes long enough for another merge to get there.
+          #
+          # view-then-create, and --clobber on upload, so re-running a
+          # half-finished release job resumes instead of erroring on the tag or
+          # on assets that already landed. The target is compared rather than
+          # just the tag name: a release already standing under this tag for a
+          # different commit -- a short-sha collision, or a hand-made tag -- must
+          # not have another commit's binaries clobbered into it.
+          if target=$(gh release view "$tag" --json targetCommitish --jq .targetCommitish 2>/dev/null); then
+            if [ "$target" != "$GITHUB_SHA" ]; then
+              echo "::error::release $tag already exists for $target, not $GITHUB_SHA"
+              exit 1
+            fi
+          else
+            gh release create "$tag" \
+              --target "$GITHUB_SHA" \
+              --prerelease \
+              --title "$tag" \
+              --notes-file release-notes.md
+          fi
+
+          gh release upload "$tag" dmg/*.dmg --clobber

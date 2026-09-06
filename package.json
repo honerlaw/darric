@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
     "typecheck": "tsc --noEmit",
     "typecheck:node": "tsc -p tsconfig.node.json --noEmit",
     "lint": "eslint .",

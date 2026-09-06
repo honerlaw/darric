@@ -1,0 +1,33 @@
+# Scratchpad: release-on-merge
+
+## Balanced decisions 2026-09-05
+
+- [reviewed — folded] scope check: one unit, one PR, unphased (Skeptic endorsed the scope call itself; folded its trigger-granularity point by widening `paths-ignore` to `**/*.md`/`LICENSE` — but rejected its suggested positive allow-list, which fails by silently shipping no release when a new source path appears; also folded the tag scheme, `permissions`, and the keep-forever retention call into the proposal as explicit decisions rather than implementation detail)
+- [reviewed — folded] approach: B, native two-arch matrix + `gh release create` (Skeptic confirmed B over `tauri-action` and universal-binary, and verified bundle paths, per-arch DMG filenames, the `.minerva` exclusion mechanism and the tag-collision reasoning; folded seven corrections — `macos-13` is retired so the Intel leg is `macos-15-intel`, per-arch `upload-artifact` names to avoid a v4 409, an arch-keyed `rust-cache`, `--target "$GITHUB_SHA"` plus a checkout to close the tag race, idempotent create/`--clobber` for re-runs, `workflow_dispatch` as a recovery hatch, and `xattr -d com.apple.quarantine` as the real unsigned-app remedy)
+- [decided] whole-proposal soundness: internally consistent, bounded to one workflow file plus one npm script and docs, no public interface or cross-cutting contract (solo gate)
+- [reviewed — clean] completion verification: all 10 success criteria met (Verifier reproduced each independently and additionally ran the Rust half — clippy pedantic/nursery/cargo and rustfmt — which the checklist had conservatively deferred to CI; both clean, nothing folded)
+
+## Review finding 2026-09-05
+
+Eight findings from the code-review pass; six fixed, one dissolved with a fix, one ignored.
+
+FIXED:
+
+1. `download-artifact` only warns on a pattern that matches nothing, so re-running just the release job after one of the two artifacts had expired would have clobbered the release with a single architecture and gone green — the exact silent half-release `if-no-files-found: error` guards against on the upload side. Now asserts both DMGs are present before uploading.
+2. `workflow_dispatch` had no ref restriction and the release job's guard was only "not a pull request", so dispatching from a feature branch would publish a real prerelease named `main-<sha>` from code that never merged. The guard now names `push` and `workflow_dispatch` on `refs/heads/main` explicitly.
+3. A single ref-level concurrency group looked like it serialised releases, but GitHub keeps only one run pending per group — a third merge landing during the first one's build evicts the second's pending run, and that merge never gets a release. Real runs are now keyed per commit; PR dry runs stay keyed per PR ref so a new push still supersedes the old one.
+4. `permissions: contents: write` sat at workflow level, so the build job held a repo-write token while running `npm ci` and cmake/whisper.cpp build scripts. Workflow default is now `contents: read`, with write granted only on the release job.
+5. Because the concurrency key included `github.event_name`, a manual re-cut and the push run for the same commit landed in different groups and could race for the same tag. Subsumed by the per-commit key in (3).
+6. `gh release view` matched the tag name only, so a release already standing under that tag for a different commit would have had another commit's binaries clobbered into it. The existing release's `targetCommitish` is now compared against `$GITHUB_SHA` and a mismatch fails loudly.
+
+DISSOLVED: the README's "every merge" claim was stronger than the implementation guaranteed — true again once (3) gave every merge its own run.
+
+IGNORED: the macOS setup block (cmake / rust-toolchain / rust-cache / setup-node / npm ci) is now duplicated across four job definitions and could be a composite action. No failure scenario, and the refactor reaches `check.yml`, which is outside this diff.
+
+Verified by simulating the release script against a stubbed `gh` across all five states: zero DMGs, one DMG (expired artifact), two DMGs with no release, two DMGs re-running on its own release, and a tag owned by a different commit. Only the two-DMG cases proceed.
+
+## Balanced decisions 2026-09-05 (post-ship CI)
+
+- [escalated to user] arm64 CPU baseline: the first CI run failed on aarch64 because ggml's `-mcpu=native` compiled an i8mm intrinsic into a unit built without i8mm. A non-trivial build failure is a hardcoded escalation, and the fix was a real choice — switch to the known-green `macos-latest` runner (one line, but keeps `-mcpu=native`, so a binary built on an M2+ runner can SIGILL on an M1) versus force a portable baseline. User chose the portable baseline.
+- [decided] minimum macOS 14.4: the x64 leg failed separately on `std::filesystem` needing a 10.15 deployment target, because no `minimumSystemVersion` was ever declared and Tauri defaulted to 10.13. darric calls `AudioHardwareCreateProcessTap` (14.4+) unconditionally, so any lower declaration was already false and would install on systems where recording cannot work. Declaring the real minimum is dominant, not a coin flip — decided solo (solo gate).
+- [reviewed — folded] replan acceptance: the toolchain-file mechanism was verified sound by the Skeptic (it traced build.rs, the cmake crate 0.1.58 source and ggml's CMakeLists), but it falsified the draft's central claim — `GGML_NATIVE=OFF` does NOT yield an x86-64 baseline, because `INS_ENB = NOT (GGML_NATIVE OR NOT GGML_NATIVE_DEFAULT)` evaluates to ON for a native build, leaving AVX2/FMA/F16C enabled. Reproduced locally: `GGML_NATIVE:BOOL=OFF` alongside `GGML_AVX2:BOOL=ON`. The checked-in comment asserted a false universal guarantee; rewritten to state the true per-arch floor and to tie the x86 case to `minimumSystemVersion` 14.4, which is the only reason it is safe. Also folded: the declaration moved from the workflow's `env:` to `src-tauri/.cargo/config.toml` so local builds stop diverging from the shipped binary (the README tells developers to run `npm run tauri:build`, which had no toolchain file); recorded that `WHISPER_NATIVE=OFF` is a silent no-op so nobody "simplifies" into it; recorded that defining `CMAKE_TOOLCHAIN_FILE` suppresses the cmake crate's compiler pinning; and softened the unbenchmarked performance claim.
