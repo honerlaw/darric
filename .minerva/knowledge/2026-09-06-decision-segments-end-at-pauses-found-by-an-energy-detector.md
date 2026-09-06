@@ -47,3 +47,4 @@ speech, 0.6 s of pause, twice) cannot yield two segments under a 3 s minimum.
 - [[2026-09-06-bug-whisper-transcribes-silence-as-thank-you]] — the gate that makes an energy detector safe as the cutter
 - [[2026-09-06-decision-recorded-at-is-the-capture-time]] — what each segment's start time becomes
 - [[2026-09-06-bug-capture-stamps-drifted-after-a-delivery-gap]] — the clock rule this design needs
+- [[2026-09-06-reference-a-windowed-sinc-resampler-needs-64-taps-for-40-db]] — see also

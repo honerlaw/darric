@@ -38,3 +38,4 @@ is valid for the life of the app process and the tool description says not to pe
 
 - [[2026-09-06-decision-mcp-server-rebuilt-in-process-on-rmcp-3]] — the tool whose cursor this bounds
 - [[2026-09-06-bug-an-empty-page-with-no-cursor-restarts-the-poll-loop]] — the other way a cursor goes wrong
+- [[2026-09-06-decision-recorded-at-is-the-capture-time]] — see also
