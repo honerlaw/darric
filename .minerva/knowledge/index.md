@@ -9,6 +9,9 @@
 - [[2026-09-05-decision-capture-engine-requires-a-transcriber]] — the optional transcriber let two separate bugs present as a normal recording that transcribed nothing, so the parameter is now required and callers that cannot obtain one must fail
 - [[2026-09-05-decision-nvmrc-is-the-single-node-version-source]] — both workflows use `node-version-file: .nvmrc` rather than a `node-version:` literal, so bumping Node is a one-line edit — do not "simplify" a workflow back to a hardcoded version
 - [[2026-09-05-decision-strip-darric-to-a-recorder]] — darric is now only a recorder — the AI chat, MCP client, MCP server, notes, tasks, tags, search and board features were deleted outright, retiring the four MCP decisions with them
+- [[2026-09-06-decision-mcp-server-reads-through-its-own-read-only-connection]] — MCP tools query a second `SQLITE_OPEN_READ_ONLY` connection, never the app's write connection, so an agent's query cannot delay a transcript insert and cannot write by drift
+- [[2026-09-06-decision-mcp-server-rebuilt-in-process-on-rmcp-3]] — darric again hosts a read-only MCP server in-process — rmcp 3.2, streamable HTTP on 127.0.0.1:27842/mcp, always on, four tools — reviving the four May 2026 MCP decisions the strip retired
+- [[2026-09-06-decision-one-test-db-helper-built-from-the-production-migration-list]] — inline Rust tests get their schema from `db::test_db()`, which runs `migrations::migrations()`, instead of each module re-listing every migration with `include_str!`
 
 ## Bugs
 
@@ -21,6 +24,7 @@
 - [[2026-09-05-bug-phase-progress-misreads-squash-merged-phases]] — `phasing.md` feeds `phase_progress()` from `git branch --merged`, which cannot see a squash-merged branch — so a phase that has shipped reads as pending and would be re-shipped forever
 - [[2026-09-05-bug-prettierignore-misses-generated-tauri-schemas]] — `.prettierignore` did not exclude the git-ignored `src-tauri/gen/` Tauri schemas, so `npm run format` failed locally for anyone who had run a build — while CI stayed green because it formats before those files exist
 - [[2026-09-05-bug-the-session-start-guard-is-check-then-act]] — `start_session` / `resume_session` check `engine.is_some()` at the top but install the engine only after the model load, so two commands could both pass and the second's engine silently replaced the first — whose threads and whisper workers then ran until the app quit
+- [[2026-09-06-bug-an-empty-page-with-no-cursor-restarts-the-poll-loop]] — `get_transcript` returned `next_cursor: null` on an empty page while telling the agent to pass `next_cursor` back, so a quiet poll restarted the transcript from line one; an empty page now echoes the caller's cursor
 
 ## Patterns
 
@@ -42,6 +46,9 @@
 - [[2026-09-05-constraint-aria-modal-promises-inertness-that-nothing-enforces]] — adding `aria-modal` without focus containment tells assistive technology the background is unreachable while Tab still walks straight out of the dialog into live controls behind the backdrop — three Tabs from the delete prompt reached Record, where Enter starts a recording
 - [[2026-09-05-constraint-phases-must-use-the-canonical-list-form]] — `read_phases` stops at the next `#` line, so writing phases as `### 1. Name` subsections parses as zero phases — the unit ships as unphased and its later phases are stranded with no error
 - [[2026-09-05-constraint-tauri-events-from-setup-reach-no-webview]] — `emit` only reaches webviews already holding a listener, so anything emitted during `setup()` is lost and needs a command the frontend can poll on mount
+- [[2026-09-06-constraint-a-table-rebuild-renumbers-transcript-rowids-and-every-mcp-cursor]] — `transcript_lines` has a `TEXT` primary key, so its rowid — the `get_transcript` cursor — is reassigned by `VACUUM` or a create-copy-drop-rename migration like 010; cursors are valid only for one app process
+- [[2026-09-06-constraint-tauri-setup-runs-outside-the-tokio-runtime]] — `tokio::net::TcpListener::from_std` panics in `setup()` because no runtime is entered there; bind a std listener synchronously and convert it inside the `tauri::async_runtime::spawn`ed future
+- [[2026-09-06-constraint-user-event-setup-replaces-navigator-clipboard]] — `@testing-library/user-event` installs its own clipboard on `setup()`, so a `writeText` mock from `beforeEach` is never called — spy on `navigator.clipboard.writeText` after `setup()` instead
 
 ## References
 
@@ -58,3 +65,4 @@
 - [[2026-09-05-reference-model-rs-download-paths-have-no-tests]] — `MODEL_URL` is a hard-coded `const`, so no Rust test can reach the status, mid-stream, rename, cleanup or serialisation paths; `model.rs` is the one module of seven with no test block
 - [[2026-09-05-reference-stop-session-releases-the-engine-before-teardown]] — `stop_session` `take()`s the engine out of `AppState` synchronously on entry and only then spawns the blocking teardown, so for the seconds that follow every engine-derived command reports "no recording" while capture threads, segmenters and whisper workers are still running
 - [[2026-09-05-reference-whisper-inference-serialises-on-one-metal-gpu]] — measured 1.14x speedup from 4x the threads against one shared `WhisperContext`, so pool size buys almost nothing and the queue's overflow policy is what protects a recording
+- [[2026-09-06-reference-rmcp-3-streamable-http-client-needs-reqwest-0-13]] — `StreamableHttpClient` is implemented only for reqwest 0.13's `Client`; the model downloader is on 0.12, so the protocol test uses a renamed `reqwest13` dev-dependency

@@ -34,3 +34,6 @@ loss than the branch it hides.
   controllable (a settable `matches`, and listener spies) before its tests mean anything.
 - Because the stub is global rather than per-file, a test that needs different behavior must
   override it explicitly; it cannot assume jsdom's absence of `matchMedia`.
+
+## Related
+- [[2026-09-06-constraint-user-event-setup-replaces-navigator-clipboard]] — see also

@@ -50,3 +50,4 @@ defect is in the shape of the question.
 - [[2026-09-05-pattern-state-changed-only-in-finally-reads-as-a-dead-click]] — see also
 - [[2026-09-05-bug-a-click-targets-the-common-ancestor-of-its-press-and-release]] — see also
 - [[2026-09-05-pattern-renderhook-reads-callbacks-fresh-so-stale-closures-cannot-fail]] — see also
+- [[2026-09-06-bug-an-empty-page-with-no-cursor-restarts-the-poll-loop]] — see also

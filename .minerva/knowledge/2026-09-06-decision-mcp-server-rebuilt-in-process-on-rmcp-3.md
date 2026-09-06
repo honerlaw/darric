@@ -49,3 +49,9 @@ must never be called. A `Host: evil.example` probe returns 403.
 - [[2026-05-19-decision-tool-handler-router-pattern]] — still the only form the lint policy allows
 - [[2026-05-19-decision-inline-tests-for-mcp-queries]] — the tests are inline again
 - [[2026-09-05-constraint-tauri-events-from-setup-reach-no-webview]] — why the chip polls a command instead of listening for an event
+- [[2026-09-06-bug-an-empty-page-with-no-cursor-restarts-the-poll-loop]] — see also
+- [[2026-09-06-constraint-a-table-rebuild-renumbers-transcript-rowids-and-every-mcp-cursor]] — see also
+- [[2026-09-06-constraint-tauri-setup-runs-outside-the-tokio-runtime]] — see also
+- [[2026-09-06-decision-mcp-server-reads-through-its-own-read-only-connection]] — see also
+- [[2026-09-06-decision-one-test-db-helper-built-from-the-production-migration-list]] — see also
+- [[2026-09-06-reference-rmcp-3-streamable-http-client-needs-reqwest-0-13]] — see also

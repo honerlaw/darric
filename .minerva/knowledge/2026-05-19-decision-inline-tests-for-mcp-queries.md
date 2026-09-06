@@ -31,3 +31,5 @@ Tests for `mcp_server::service::queries` live inline in `queries.rs` under `#[cf
 - [[2026-05-19-decision-tool-handler-router-pattern]] — also decided by this repo's no-`#[allow]`-outside-tests policy
 - [[2026-05-19-decision-spawn-blocking-for-rusqlite-tools]] — covers the same sync query layer that the tool handlers offload
 - [[2026-09-05-decision-strip-darric-to-a-recorder]] — see also
+- [[2026-09-06-decision-mcp-server-rebuilt-in-process-on-rmcp-3]] — see also
+- [[2026-09-06-decision-one-test-db-helper-built-from-the-production-migration-list]] — see also

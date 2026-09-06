@@ -62,3 +62,4 @@ This binds the macro-generated routing logic to the instance field, so the field
 
 - [[2026-05-19-decision-rmcp-as-mcp-sdk]] — depends on the rmcp pin chosen there
 - [[2026-05-19-decision-inline-tests-for-mcp-queries]] — also decided by this repo's no-`#[allow]`-outside-tests policy
+- [[2026-09-06-decision-mcp-server-rebuilt-in-process-on-rmcp-3]] — see also
