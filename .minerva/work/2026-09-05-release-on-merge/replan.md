@@ -65,7 +65,20 @@ Keep both pinned native runners. Two additions, one per failure.
 set(GGML_NATIVE OFF CACHE BOOL "Target a portable CPU baseline, not the build machine" FORCE)
 ```
 
-and the build step passes `CMAKE_TOOLCHAIN_FILE` pointing at it.
+and `src-tauri/.cargo/config.toml` declares it for **every** cargo invocation:
+
+```toml
+[env]
+CMAKE_TOOLCHAIN_FILE = { value = "cmake/portable-cpu.cmake", relative = true }
+```
+
+Declared there rather than in the workflow's `env:` block, which is where the first draft put it.
+A CI-only override leaves a developer running the `npm run tauri:build` the README recommends on
+the old `-mcpu=native` path — able to hit the same i8mm failure with nothing pointing at the fix —
+and silently gives local builds a different CPU profile from the shipped one. One declaration makes
+local, `check.yml` and the release build agree. `relative = true` resolves against `src-tauri/`, so
+no absolute path is baked into CI, and cargo leaves an existing value alone, so a developer can
+still opt out for a one-off native build.
 
 A toolchain file rather than a `GGML_NATIVE=OFF` environment variable, because whisper-rs-sys
 0.13.1's `build.rs` forwards into cmake only those variables whose names begin with `WHISPER_` or
@@ -74,12 +87,27 @@ that allowlist and cannot be passed directly; `CMAKE_TOOLCHAIN_FILE` does, and a
 read before ggml's `option()` call, so a `FORCE`d cache entry set there wins. The file deliberately
 does not set `CMAKE_SYSTEM_NAME`, which would flip CMake into cross-compiling mode.
 
-Applied to **both** legs, deliberately — a baseline x86-64 build is desirable for exactly the same
-distribution reason.
+Applied to **both** legs — but the two legs do not get the same thing, and the replan gate caught
+the first draft claiming they did.
 
-The cost is some CPU-kernel tuning, which is close to free here: whisper inference runs on the
-Metal GPU ([[2026-09-05-reference-whisper-inference-serialises-on-one-metal-gpu]]), so these CPU
-quant kernels are not the hot path.
+- **arm64 gets a real baseline.** ggml's non-native branch adds `-march` only from
+  `GGML_CPU_ARM_ARCH`, which is unset, so the build takes the toolchain default and the i8mm path
+  is compiled out. This is the half that fixes the failure.
+- **x86_64 does not.** ggml computes `INS_ENB = NOT (GGML_NATIVE OR NOT GGML_NATIVE_DEFAULT)`, and
+  `GGML_NATIVE_DEFAULT` is ON whenever the build is not cross-compiling — always, here. Turning
+  `GGML_NATIVE` off therefore makes `INS_ENB` **ON**, and `GGML_AVX2`/`GGML_FMA`/`GGML_F16C` default
+  to it. Confirmed in the generated cache: `GGML_NATIVE:BOOL=OFF` alongside `GGML_AVX2:BOOL=ON`.
+  The x64 binary requires Haswell-class (2013+) hardware.
+
+That x86 floor is safe only because of the other half of this replan: `minimumSystemVersion` 14.4
+means every Intel Mac in scope is a 2017-or-newer model, hence Skylake+ and AVX2-capable. **The two
+settings are load-bearing together** — lowering the minimum re-opens the gap, and the toolchain file
+says so at the point someone would change it.
+
+The cost is some CPU-kernel tuning. Whisper inference runs on the Metal GPU
+([[2026-09-05-reference-whisper-inference-serialises-on-one-metal-gpu]]), so the quant kernels are
+off the hot path — though the mel-spectrogram front end and sampling still run on CPU, and this is
+reasoned rather than benchmarked.
 
 Verified locally rather than assumed. After a clean rebuild with the toolchain file set, the
 generated `CMakeCache.txt` reads:

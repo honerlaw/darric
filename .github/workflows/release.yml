@@ -93,14 +93,12 @@ jobs:
 
       - run: npm ci
 
-      # Target a portable CPU baseline instead of the build machine's own CPU.
-      # See src-tauri/cmake/portable-cpu.cmake -- it is a toolchain file rather
-      # than a GGML_NATIVE env var because whisper-rs-sys only forwards
-      # WHISPER_*/CMAKE_* variables into its cmake build. The path must be
-      # absolute for CMake to resolve it.
+      # The CPU baseline is NOT set here. src-tauri/.cargo/config.toml declares
+      # CMAKE_TOOLCHAIN_FILE for every cargo invocation, so a local build, the
+      # check.yml jobs and this release build all compile ggml identically --
+      # one declaration instead of a CI-only override that local builds silently
+      # diverge from.
       - run: npm run tauri:build
-        env:
-          CMAKE_TOOLCHAIN_FILE: ${{ github.workspace }}/src-tauri/cmake/portable-cpu.cmake
 
       # if-no-files-found: error -- a leg that produced no DMG has to fail the
       # job. The alternative is a green run that cuts a release missing half its
