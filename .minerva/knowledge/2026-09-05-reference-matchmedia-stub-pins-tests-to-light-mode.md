@@ -38,3 +38,4 @@ loss than the branch it hides.
 ## Related
 
 - [[2026-09-06-constraint-user-event-setup-replaces-navigator-clipboard]] — see also
+- [[2026-09-06-constraint-jsdom-fires-no-blur-on-unmount]] — see also

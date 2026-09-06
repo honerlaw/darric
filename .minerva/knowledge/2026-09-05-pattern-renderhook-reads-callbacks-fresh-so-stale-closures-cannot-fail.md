@@ -59,3 +59,4 @@ all inside one `act`, so the suspended closure is genuinely the old one.
 - [[2026-09-05-pattern-shared-state-cannot-be-cleared-for-one-reader]] — why `activeSessionId` outlives its recording, which is what makes this window reachable
 - [[2026-09-05-pattern-verifying-a-sequence-says-nothing-about-whether-it-runs]] — the same question asked of a code path rather than a test's reach
 - [[2026-09-05-pattern-relocating-a-control-drops-the-context-its-mount-point-supplied]] — see also, another compound guard whose clauses were not separately covered
+- [[2026-09-06-constraint-jsdom-fires-no-blur-on-unmount]] — see also

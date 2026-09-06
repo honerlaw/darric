@@ -47,6 +47,7 @@
 - [[2026-09-05-constraint-phases-must-use-the-canonical-list-form]] — `read_phases` stops at the next `#` line, so writing phases as `### 1. Name` subsections parses as zero phases — the unit ships as unphased and its later phases are stranded with no error
 - [[2026-09-05-constraint-tauri-events-from-setup-reach-no-webview]] — `emit` only reaches webviews already holding a listener, so anything emitted during `setup()` is lost and needs a command the frontend can poll on mount
 - [[2026-09-06-constraint-a-table-rebuild-renumbers-transcript-rowids-and-every-mcp-cursor]] — `transcript_lines` has a `TEXT` primary key, so its rowid — the `get_transcript` cursor — is reassigned by `VACUUM` or a create-copy-drop-rename migration like 010; cursors are valid only for one app process
+- [[2026-09-06-constraint-jsdom-fires-no-blur-on-unmount]] — jsdom fires no blur on unmount, so an exactly-once assertion cannot pin a blur-driven commit
 - [[2026-09-06-constraint-tauri-setup-runs-outside-the-tokio-runtime]] — `tokio::net::TcpListener::from_std` panics in `setup()` because no runtime is entered there; bind a std listener synchronously and convert it inside the `tauri::async_runtime::spawn`ed future
 - [[2026-09-06-constraint-user-event-setup-replaces-navigator-clipboard]] — `@testing-library/user-event` installs its own clipboard on `setup()`, so a `writeText` mock from `beforeEach` is never called — spy on `navigator.clipboard.writeText` after `setup()` instead
 
