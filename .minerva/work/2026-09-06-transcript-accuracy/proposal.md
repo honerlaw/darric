@@ -246,7 +246,8 @@ length across many small pushes equals the length of one large push.
 1. **silence-gate** — whisper-rs 0.16, bundled Silero VAD, transcription gate, one line per
    segment, flush floor, capture give-up, migration 011, README. Criteria 1, 2, 3, 4, 8a.
 2. **utterance-segmentation** — pause-based segmenter, capture-time `recorded_at`,
-   windowed-sinc resampler, MCP/README wording. Criteria 5, 6, 7, 8b.
+   windowed-sinc resampler, MCP/README wording. Criteria 5, 6, 7, 8b. Precondition: the
+   criterion-2 user confirmation from phase 1 is recorded in the scratchpad.
 
 ## Open Questions
 

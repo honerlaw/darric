@@ -15,6 +15,7 @@
 - [reviewed — clean] whole-proposal soundness: Skeptic accept; noted and clarified in text: ignored accuracy test is run locally before each ship (not CI), phase-1 one-line join can merge two utterances in one 8 s window (accepted until phase 2), exact_u32_from_f64 becomes pub(crate), fixture is say+afconvert as in the prototype
 - [reviewed — folded] completion verification (phase 1): Verifier revise — criteria 1, 3, 4, 8a reproduced and met; criterion 2 unmet as worded ("verified in the running app" not literally done, mic path not on hardware) → added a real-microphone hardware test (passed) and triggered Phase 2.5 replan to reword criterion 2
 - [reviewed — folded] new-plan acceptance (replan, criterion 2): Skeptic accept; folded 1 (idle-tap-is-silence stated as inference, not fact) and 2 (user confirmation gates phase-2 ship and is recorded, not merely asked); 3 subsumed by 1; 4–6 confirmatory
+- [rechecked — clean] new-plan acceptance (replan, criterion 2): fold-audit confirmed items 1–3 addressed; its one low note (phase-2 precondition only in prose) folded as a precondition line on phase 2 in `## Phases`
 
 ## Work notes 2026-09-06 (phase 1)
 
