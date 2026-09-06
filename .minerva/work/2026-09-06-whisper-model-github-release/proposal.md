@@ -44,10 +44,10 @@ and stays open.
    after the loop — and **before** `tokio::fs::rename` — compare the lower-hex digest with the
    constant and return an `AppError::Audio("model download failed checksum …")` on mismatch, so
    the existing failure path in `ensure_model` removes the `.tmp` and emits
-   `model_download_error`; on a match, log one line naming the verified digest. Also treat a stream that ends with fewer bytes than `Content-Length`
-   as a failure, guarded on `total > 0` so a server that sends no `Content-Length` is not
-   misreported (the checksum catches truncation too, but the message should say "truncated"
-   rather than "checksum"). Add `sha2 = "0.10"` to
+   `model_download_error`; on a match, log one line naming the verified digest. Also treat a
+   stream that ends with fewer bytes than `Content-Length` as a failure, guarded on `total > 0`
+   so a server that sends no `Content-Length` is not misreported (the checksum catches
+   truncation too, but the message should say "truncated" rather than "checksum"). Add `sha2 = "0.10"` to
    `Cargo.toml` — already in `Cargo.lock` transitively, so no new compiled code.
 3. **Testable seam, minimal.** Extract the digest comparison into a pure
    `fn verify_digest(actual_hex: &str) -> Result<()>` with an inline `#[cfg(test)] mod tests`
