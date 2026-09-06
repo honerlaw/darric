@@ -127,7 +127,7 @@ install the app already reaches GitHub's release assets. The file is a byte-exac
 truncated or swapped download is refused rather than cached; the next Record press or launch
 downloads it again. The download trusts the system keychain as well as the public root
 certificates, so a corporate network that inspects TLS works as long as its root is installed
-there. If neither host is reachable, copy the file from another machine into
+there (and `SSL_CERT_FILE` is not set in the launching shell, which overrides the keychain). If neither host is reachable, copy the file from another machine into
 `~/Library/Application Support/darric/ggml-large-v3-turbo.bin` and the app will use it as is.
 
 The download starts on its own as soon as the app opens, and a progress bar under the header

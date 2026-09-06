@@ -188,8 +188,8 @@ async fn download(app: &AppHandle, path: &Path) -> Result<()> {
 ///
 /// reqwest's `Display` stops at its own layer — "error sending request for url
 /// (…)" — and keeps the cause (a TLS handshake rejected by an unknown issuer, a
-/// refused connection, a DNS failure) in `source()`. That cause is the whole
-/// diagnosis, so the log and the error bar carry the full chain.
+/// refused connection, a DNS failure) in `source()`. That cause is the useful
+/// part of the diagnosis, so the log and the error bar carry the full chain.
 fn error_chain(error: &dyn StdError) -> String {
     let mut text = error.to_string();
     let mut cause = error.source();
