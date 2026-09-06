@@ -1,0 +1,11 @@
+# Scratchpad: node-24-everywhere
+
+## Quick decisions 2026-09-05
+
+- [decided] scope check: single unfazed unit — five files, no public interface, no runtime code touched
+- [decided] approach: `.nvmrc` as single source with `node-version-file` in both workflows (rejected hardcoding 24 in five places, which recreates the README/CI drift that motivates the unit; rejected `engine-strict=true`, a hard install gate broader than the seed asks for; rejected pinning `engines` to `^24`, since the risk is "too old" not "too new")
+- [decided] `@types/node` `^25` → `^24`: types describing a major the project does not run let `tsconfig.node.json` code typecheck against APIs Node 24 lacks. Aligning to the runtime is dominant; the typecheck gate proves it either way (solo)
+- [decided] whole-proposal soundness: bounded and internally consistent; no public interface or cross-cutting contract
+- [decided] completion verification: all six criteria met — `.nvmrc` is `24`, zero `node-version:` literals remain against four `node-version-file` uses, `engines.node` is `">=24"`, `@types/node` `^24` resolves to 24.13.3 against a v24.13.0 runtime, no `v18+` left in the README, and the full check passes (both typecheck configs, eslint, prettier, 95/95 tests)
+- [decided] review triage: one finding, fixed — the README's version-manager claim was false for Volta (ignores `.nvmrc`) and conditionally false for asdf (needs `legacy_version_file = yes`). Documentation for behavior this diff touched is never deferred. Review confirmed the two mechanical risks were clean: `node-version-file` is a real `setup-node@v4` input resolved against `GITHUB_WORKSPACE` with `checkout` first in all four jobs, and nothing in the repo uses a Node 25 API, so the `@types/node` downgrade moved only that package and its `undici-types` transitive
+- [decided] promote partition: one entry promoted — the single-source arrangement, because a future contributor "simplifying" a workflow back to a hardcoded `node-version:` is the realistic way this regresses. The Volta/asdf fact stays in the README where it is actionable rather than duplicated into knowledge; `engine-strict` stays a documented rejection with no failure scenario, so it is below the deferral bar and files no issue
