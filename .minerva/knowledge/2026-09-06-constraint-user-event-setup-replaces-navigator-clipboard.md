@@ -41,3 +41,4 @@ the `beforeEach` stub and works either way.
 ## Related
 
 - [[2026-09-05-reference-matchmedia-stub-pins-tests-to-light-mode]] — the other navigator-level stub in this suite whose lifecycle is easy to misread
+- [[2026-09-06-constraint-jsdom-fires-no-blur-on-unmount]] — see also
