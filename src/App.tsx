@@ -105,9 +105,10 @@ export default function App(): React.JSX.Element {
     void resume(viewingSessionId);
   };
 
+  // Both callers only send a name that is non-empty once trimmed; the pane
+  // sends its raw draft, so the trim still has to happen here.
   const handleRename = (id: string, topic: string): void => {
-    const trimmed = topic.trim();
-    void update(id, trimmed !== "" ? trimmed : undefined);
+    void update(id, topic.trim());
   };
 
   const handleDelete = (id: string): void => {

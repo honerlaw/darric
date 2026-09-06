@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { RecorderPane } from "./RecorderPane";
 import type { Session, TranscriptLine } from "../types";
@@ -64,6 +64,24 @@ describe("RecorderPane title editing", () => {
     await user.type(input, "renamed A{Enter}");
 
     expect(onRename).toHaveBeenCalledWith("renamed A");
+  });
+
+  it("ignores Enter that confirms an IME composition", async () => {
+    // Same guard as the sidebar editor: Enter with `isComposing` set accepts
+    // an IME candidate and must not commit the half-converted draft.
+    const user = userEvent.setup();
+    const onRename = vi.fn();
+    render(
+      <RecorderPane {...BASE_PROPS} session={makeSession("a", "Session A")} onRename={onRename} />,
+    );
+
+    await user.click(screen.getByText("Session A"));
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "会議" } });
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+
+    expect(onRename).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
   });
 });
 

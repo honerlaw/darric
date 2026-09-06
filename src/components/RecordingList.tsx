@@ -109,6 +109,9 @@ export function RecordingList({
                     setEditing({ id: s.id, draft: e.target.value });
                   }}
                   onKeyDown={(e) => {
+                    // Enter inside an IME composition confirms the candidate,
+                    // not the name — committing there would store half a word.
+                    if (e.nativeEvent.isComposing) return;
                     if (e.key === "Escape") cancelEditRef.current = true;
                     if (e.key === "Enter" || e.key === "Escape") e.currentTarget.blur();
                   }}

@@ -399,6 +399,104 @@ describe("RecordingList inline rename", () => {
     expect(onRename).not.toHaveBeenCalled();
   });
 
+  it("routes Enter through blur rather than committing on its own", async () => {
+    // jsdom fires no blur when a focused element is unmounted, so the
+    // "exactly once" assertion above cannot tell Enter-commits-then-blurs from
+    // Enter-blurs-and-the-blur-commits. With blur stubbed out, the first
+    // design commits and the second does nothing — which is what pins it.
+    const user = userEvent.setup();
+    const onRename = vi.fn();
+    const blur = vi.spyOn(HTMLElement.prototype, "blur").mockImplementation(() => undefined);
+    try {
+      render(
+        <RecordingList
+          {...BASE_PROPS}
+          sessions={[makeSession("a", "Standup")]}
+          onDelete={(): void => undefined}
+          onRename={onRename}
+        />,
+      );
+
+      await user.dblClick(screen.getByText("Standup"));
+      await user.keyboard("Daily{Enter}");
+
+      expect(blur).toHaveBeenCalled();
+      expect(onRename).not.toHaveBeenCalled();
+      expect(screen.getByRole("textbox")).toBeInTheDocument();
+    } finally {
+      blur.mockRestore();
+    }
+  });
+
+  it("commits a name for an untitled recording", async () => {
+    // The unchanged-name guard compares against the stored topic, which is
+    // null here — not against the "Untitled recording" the row displays.
+    const user = userEvent.setup();
+    const onRename = vi.fn();
+    render(
+      <RecordingList
+        {...BASE_PROPS}
+        sessions={[makeSession("a", null)]}
+        onDelete={(): void => undefined}
+        onRename={onRename}
+      />,
+    );
+
+    await user.dblClick(screen.getByText("Untitled recording"));
+    await user.keyboard("Kickoff{Enter}");
+
+    expect(onRename).toHaveBeenCalledWith("a", "Kickoff");
+  });
+
+  it("keeps the editor and its draft across a list refresh", async () => {
+    // The list is re-read from the backend after a stop or another rename.
+    // The editor is keyed by id and holds its own draft, so a refresh that
+    // still contains the recording must not close it or reset the text.
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <RecordingList
+        {...BASE_PROPS}
+        sessions={[makeSession("a", "Standup")]}
+        onDelete={(): void => undefined}
+      />,
+    );
+
+    await user.dblClick(screen.getByText("Standup"));
+    await user.keyboard("Daily");
+    rerender(
+      <RecordingList
+        {...BASE_PROPS}
+        sessions={[makeSession("b", "Retro"), makeSession("a", "Standup")]}
+        onDelete={(): void => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Rename Standup" })).toHaveValue("Daily");
+  });
+
+  it("ignores Enter that confirms an IME composition", async () => {
+    // A CJK user presses Enter to accept a candidate. The key reaches the
+    // input with `isComposing` set, and committing there stores half a word.
+    const user = userEvent.setup();
+    const onRename = vi.fn();
+    render(
+      <RecordingList
+        {...BASE_PROPS}
+        sessions={[makeSession("a", "Standup")]}
+        onDelete={(): void => undefined}
+        onRename={onRename}
+      />,
+    );
+
+    await user.dblClick(screen.getByText("Standup"));
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "会議" } });
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+
+    expect(onRename).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
+  });
+
   it("does not let a cancelled edit poison the next commit", async () => {
     // The cancel flag is consumed by the blur that follows Escape. If it were
     // not reset, the very next Enter-commit on another row would be dropped.
