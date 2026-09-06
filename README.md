@@ -40,7 +40,8 @@ To build one yourself instead, see [Prerequisites](#prerequisites) and run `npm 
 ## Prerequisites
 
 - macOS 14.4 or later — darric records with Core Audio process taps (`AudioHardwareCreateProcessTap`), which do not exist before 14.4
-- [Node.js](https://nodejs.org/) (v18+) and npm
+- [Node.js](https://nodejs.org/) 24 and npm — the version is pinned in `.nvmrc`, so `nvm use` (or
+  fnm/asdf/volta) selects it, and CI reads the same file
 - [Rust](https://rustup.rs/) (stable toolchain)
 - Xcode Command Line Tools: `xcode-select --install`
 
