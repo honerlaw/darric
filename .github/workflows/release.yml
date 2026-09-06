@@ -32,14 +32,24 @@ on:
   # Manual re-cut, for a run lost to an infra blip.
   workflow_dispatch:
 
-# Never cancel a release that is already building. Superseded dry runs on a
-# workflow-editing PR are free to go.
+# A real run is keyed by commit, not by branch. A single ref-level group looks
+# like it serialises releases, but GitHub keeps only one run pending per group:
+# a third merge landing during the first one's build evicts the second's pending
+# run, and that merge never gets a release at all. Per-commit groups also put a
+# manual re-cut in the same group as the push run for that commit, so the two
+# queue instead of racing for the same tag.
+#
+# Dry runs on a workflow-editing PR key by PR ref instead, so a new push
+# supersedes the previous run rather than queueing behind it.
 concurrency:
-  group: release-${{ github.event_name }}-${{ github.ref }}
+  group: release-${{ github.event_name == 'pull_request' && format('pr-{0}', github.ref) || format('sha-{0}', github.sha) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Read-only by default: the build job runs `npm ci` and cmake/whisper.cpp build
+# scripts, and has no reason to hold a token that can write to the repo. Only
+# the release job is granted contents: write.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -97,8 +107,12 @@ jobs:
   release:
     name: Publish release
     needs: build
-    if: github.event_name != 'pull_request'
+    # Never on a pull request, and never for a workflow_dispatch aimed at some
+    # other branch -- the tag asserts "this is main", so it has to be.
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       # gh needs repo context, and the commit subject below has to come from a
       # checkout that knows this sha.
@@ -118,6 +132,17 @@ jobs:
         run: |
           set -euo pipefail
           tag="main-${GITHUB_SHA:0:7}"
+
+          # Both legs, or nothing. download-artifact only *warns* when its
+          # pattern matches nothing, so re-running just this job after one of
+          # the two artifacts had expired would otherwise clobber the release
+          # with a single architecture and still go green -- the same silent
+          # half-release that if-no-files-found guards against upstream.
+          found=$(find dmg -type f -name '*.dmg' | wc -l | tr -d ' ')
+          if [ "$found" -ne 2 ]; then
+            echo "::error::expected 2 DMGs, found $found"
+            exit 1
+          fi
 
           {
             echo "Automated build of \`$GITHUB_SHA\`."
@@ -145,12 +170,21 @@ jobs:
           #
           # view-then-create, and --clobber on upload, so re-running a
           # half-finished release job resumes instead of erroring on the tag or
-          # on assets that already landed.
-          gh release view "$tag" >/dev/null 2>&1 ||
+          # on assets that already landed. The target is compared rather than
+          # just the tag name: a release already standing under this tag for a
+          # different commit -- a short-sha collision, or a hand-made tag -- must
+          # not have another commit's binaries clobbered into it.
+          if target=$(gh release view "$tag" --json targetCommitish --jq .targetCommitish 2>/dev/null); then
+            if [ "$target" != "$GITHUB_SHA" ]; then
+              echo "::error::release $tag already exists for $target, not $GITHUB_SHA"
+              exit 1
+            fi
+          else
             gh release create "$tag" \
               --target "$GITHUB_SHA" \
               --prerelease \
               --title "$tag" \
               --notes-file release-notes.md
+          fi
 
           gh release upload "$tag" dmg/*.dmg --clobber
