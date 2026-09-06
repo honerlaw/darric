@@ -23,6 +23,7 @@
 - [reviewed — clean] completion verification (phase 2): Verifier accept on criteria 5, 6, 7, 8b; re-ran the pipeline test itself; disclosed deviations (MIN 2 s, 64 taps) judged necessary, not gaming
 - [decided] review triage (phase 2): 7 FIX / 0 SUGGEST / 0 IGNORE, none contested (solo gate); no load-bearing divergence
 - [escalated to user] phase-2 ship precondition (criterion 2 confirmation): asked the user to record with nothing playing on the phase-1 build; answer "output lines still appear" — but the main checkout was two commits behind origin/main (before PR #49) and the dev app restarted at 14:10 was built from it; session 210a131d shows the old behaviour ("Thank you." from the speakers tap at 18:11:20 and 18:11:27, "_Tonk_" on the mic, per-sub-segment lines). Not a phase-1 defect; main fast-forwarded to origin/main; re-test on the real phase-1 build still pending (escalation 2 of 3)
+- [decided] promote (final phase, Mode A, partial): six knowledge entries written (segmenter decision, recorded_at decision, clock-drift bug, resampler reference, CI clippy reference, say-bounded-child reference superseding the phase-1 say entry); `## Approach` rewritten to reality; `**Status**` and the scratchpad archive deferred until phase 2 actually ships, because the record must not say Shipped before it is; no TODOs cleared the deferral bar; no `**Closes**` (#16/#17 untouched)
 
 ## Work notes 2026-09-06 (phase 1)
 
@@ -81,6 +82,7 @@ Review fixes: source.rs — `supervise` refactor, `STABLE_AFTER`; vad.rs — `WR
   (2 s speech, 0.6 s pause) cannot produce two segments under a 3 s minimum, and the criterion
   is the contract. A remark shorter than the minimum waits until 2 s are buffered and then
   leaves on the next pause, so latency is bounded at ~2.4 s.
+  → promoted to .minerva/knowledge/2026-09-06-decision-segments-end-at-pauses-found-by-an-energy-detector.md
 - The noise floor also creeps up 0.2 %/frame during frames classified as speech (capped at the
   frame's own level). Without it, steady room noise louder than 4× the initial floor reads as
   speech forever and pauses are never seen; with it, such noise is reclassified within about
@@ -92,8 +94,10 @@ Review fixes: source.rs — `supervise` refactor, `STABLE_AFTER`; vad.rs — `WR
   which leaves a 12 kHz tone well above the 40 dB floor criterion 7 asks for; 64 taps measures
   under it. Cutoff 0.9 × the lower Nyquist. Every position stays integer; the ratio enters as
   gcd-reduced `u16`s.
+  → promoted to .minerva/knowledge/2026-09-06-reference-a-windowed-sinc-resampler-needs-64-taps-for-40-db.md
 - `recorded_at` is now the segment's capture start. `db::sessions::transcript_lines` already
   orders by it, so the on-screen transcript interleaves devices in speech order for free.
+  → promoted to .minerva/knowledge/2026-09-06-decision-recorded-at-is-the-capture-time.md
 - Pipeline test (segmenter → VAD → whisper on the `say` fixture spoken twice with silence
   around): the segmenter cut each pass at the natural pause between its two sentences, giving
   four whole-sentence lines stamped in order and a 410 ms tail that produced nothing.
@@ -101,6 +105,7 @@ Review fixes: source.rs — `supervise` refactor, `STABLE_AFTER`; vad.rs — `WR
   fixture generator now polls the child and kills it after 30 s, retrying once, and the fixture
   is synthesized once per test process. The phase-1 knowledge entry's "stdin null fixes it" is
   necessary but not sufficient; the bound is the real protection.
+  → promoted to .minerva/knowledge/2026-09-06-reference-say-under-cargo-test-needs-a-bounded-child-not-just-closed-stdin.md
 - VAD `speech_pad_ms` raised from whisper.cpp's 30 to 100: one room-microphone run came back
   "Quarterly numbers…" without "The"; the next run at 30 ms was verbatim, so the loss is
   acoustic variance, and the extra 140 ms per region is cheap insurance.
