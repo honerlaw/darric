@@ -22,6 +22,7 @@
 - [decided] ship + cleanup (phase 1): PR #49 merged (squash) after one CI lint fix; reconciliation owned by CI (knowledge-reconcile.yml, ran green, four entries catalogued on main); worktree teardown deferred — phase 2 outstanding; phase-2 branch cut from main
 - [reviewed — clean] completion verification (phase 2): Verifier accept on criteria 5, 6, 7, 8b; re-ran the pipeline test itself; disclosed deviations (MIN 2 s, 64 taps) judged necessary, not gaming
 - [decided] review triage (phase 2): 7 FIX / 0 SUGGEST / 0 IGNORE, none contested (solo gate); no load-bearing divergence
+- [escalated to user] phase-2 ship precondition (criterion 2 confirmation): asked the user to record with nothing playing on the phase-1 build; answer "output lines still appear" — but the main checkout was two commits behind origin/main (before PR #49) and the dev app restarted at 14:10 was built from it; session 210a131d shows the old behaviour ("Thank you." from the speakers tap at 18:11:20 and 18:11:27, "_Tonk_" on the mic, per-sub-segment lines). Not a phase-1 defect; main fast-forwarded to origin/main; re-test on the real phase-1 build still pending (escalation 2 of 3)
 
 ## Work notes 2026-09-06 (phase 1)
 
@@ -117,3 +118,10 @@ Mode: local-diff (fresh-context subagent; no PR yet). Findings from the code rev
 - [FIXED] #7 low db/sessions.rs + src/hooks/useTranscript.ts — stale comment about why rowid and timestamp order diverge; and the live view appended lines in arrival order while a reload sorts by `recorded_at`, so a reopened session could reorder what was shown live → comment rewritten; live lines are inserted by `recorded_at` (`insertByRecordedAt`, test "places a line by its capture time, not its arrival").
 
 Review fixes: vad.rs — speech pad; segmenter.rs — anchor(), floor re-derivation, comments, two tests; sessions.rs — comment; README; useTranscript.ts + test.
+
+## Criterion-2 confirmation status
+
+- 2026-09-06: attempted against a stale build (main was at 44f14ba, before #49); result invalid.
+  Main fast-forwarded to edeedb3. Awaiting a re-test on the phase-1 build: restart
+  `npm run tauri:dev`, record with nothing playing, confirm no `output` lines. Phase 2 ships
+  only after that is recorded here (or in `archive/scratchpad.md` once promoted).
