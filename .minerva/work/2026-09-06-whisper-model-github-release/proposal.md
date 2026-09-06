@@ -33,11 +33,13 @@ and stays open.
 ## Approach
 
 1. **One-time release, outside the tree.** Create a release on the fixed tag `models`:
-   `gh release create models --target main --latest=false --title "Model assets" --notes …`,
+   `gh release create models --target main --prerelease --title "Model assets" --notes …`,
    then `gh release upload models ggml-large-v3-turbo.bin`. The tag is a stable, unversioned
    home — assets are named by model file and the app pins exact bytes by checksum, so the tag
-   never needs a version suffix. `--latest=false` keeps the DMG prereleases at the top of the
-   Releases page. Re-download the uploaded asset and hash it to prove the upload is byte-exact.
+   never needs a version suffix. It is a prerelease, like every DMG release: GitHub's Latest
+   badge goes to the newest non-prerelease, so `--latest=false` alone still made `models` the
+   repo's "latest release" the moment it was the only full one. Re-download the uploaded asset
+   and hash it to prove the upload is byte-exact.
 2. **`src-tauri/src/model.rs`.** `MODEL_URL` becomes
    `https://github.com/honerlaw/darric/releases/download/models/ggml-large-v3-turbo.bin`. Add
    `const MODEL_SHA256`. Feed every chunk to a `sha2::Sha256` inside the existing stream loop;
@@ -81,8 +83,9 @@ and stays open.
 - `MODEL_URL` in `src-tauri/src/model.rs` is
   `https://github.com/honerlaw/darric/releases/download/models/ggml-large-v3-turbo.bin`, and
   `curl -sIL` of that URL ends in a 200 with `content-length: 1624555275`.
-- The `models` release exists and is not marked latest (`gh release view models --json isLatest`
-  reports `false`), so the DMG prereleases keep the Releases page's Latest badge.
+- The `models` release exists and is a prerelease (`gh release view models --json isPrerelease`
+  reports `true`), and `gh api repos/honerlaw/darric/releases/latest` still returns 404 as it
+  did before, so nothing presents the model release as the app's latest release.
 - `MODEL_SHA256` is `1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69`, which
   equals both Hugging Face's `x-linked-etag` for the file and `shasum -a 256` of the uploaded
   asset downloaded back from GitHub.

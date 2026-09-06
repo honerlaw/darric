@@ -1,5 +1,6 @@
 use crate::error::{AppError, Result};
 use futures_util::StreamExt;
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
 use tauri::{AppHandle, Emitter};
@@ -10,9 +11,18 @@ use tokio::sync::Mutex;
 // [SPEAKER_TURN] tokens for speaker attribution, which is now derived from the
 // originating device instead. Turbo is multilingual and markedly more accurate
 // at comparable speed on Apple Silicon with Metal.
+//
+// Served from this repository's `models` GitHub Release rather than from
+// Hugging Face: some corporate networks block huggingface.co outright, while
+// anything that can install the app already reaches GitHub's release assets.
+// The asset is a byte-exact mirror of ggerganov/whisper.cpp's file (MIT), and
+// `MODEL_SHA256` pins it, so a swapped or truncated download is refused.
 const MODEL_URL: &str =
-    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin";
+    "https://github.com/honerlaw/darric/releases/download/models/ggml-large-v3-turbo.bin";
 const MODEL_FILENAME: &str = "ggml-large-v3-turbo.bin";
+/// SHA-256 of the exact bytes `MODEL_URL` serves. Matches Hugging Face's LFS
+/// object hash for the upstream file (`x-linked-etag`).
+const MODEL_SHA256: &str = "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69";
 
 /// Sentinel for `DOWNLOAD_PCT` meaning "no download in flight".
 const NOT_DOWNLOADING: i64 = -1;
@@ -117,10 +127,12 @@ async fn download(app: &AppHandle, path: &Path) -> Result<()> {
     let mut stream = response.bytes_stream();
     let mut downloaded: u64 = 0;
     let mut last_reported_pct = 0u32;
+    let mut hasher = Sha256::new();
 
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| AppError::Audio(format!("download error: {e}")))?;
         downloaded += chunk.len() as u64;
+        hasher.update(&chunk);
         file.write_all(&chunk).await?;
 
         // `checked_div` yields `None` when `total` is 0 (server sent no
@@ -146,7 +158,63 @@ async fn download(app: &AppHandle, path: &Path) -> Result<()> {
 
     file.flush().await?;
     drop(file);
+
+    // Both checks run before the rename so that a bad download never reaches
+    // the cached path: `ensure_model` accepts any existing file there, so a
+    // corrupt one would be trusted on every later launch with no way to recover
+    // from inside the app. Returning early here lets `ensure_model`'s failure
+    // path remove the `.tmp` and report the error.
+    //
+    // A stream can end short of Content-Length without a transport error, which
+    // the checksum would also catch — but the truncation message says what
+    // actually happened. Skipped when the server sent no Content-Length.
+    if total > 0 && downloaded != total {
+        return Err(AppError::Audio(format!(
+            "model download truncated: got {downloaded} of {total} bytes"
+        )));
+    }
+    verify_digest(&format!("{:x}", hasher.finalize()))?;
+    log::info!("[model] checksum verified: sha256 {MODEL_SHA256}");
+
     tokio::fs::rename(&tmp, path).await?;
 
     Ok(())
+}
+
+/// Accepts a download only when its SHA-256 is the pinned `MODEL_SHA256`.
+fn verify_digest(actual_hex: &str) -> Result<()> {
+    if actual_hex == MODEL_SHA256 {
+        Ok(())
+    } else {
+        Err(AppError::Audio(format!(
+            "model download failed checksum: expected sha256 {MODEL_SHA256}, got {actual_hex}"
+        )))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verify_digest_accepts_the_pinned_hash() {
+        assert!(verify_digest(MODEL_SHA256).is_ok());
+    }
+
+    #[test]
+    fn verify_digest_rejects_any_other_hash() {
+        let other = "0".repeat(64);
+        assert!(matches!(
+            verify_digest(&other),
+            Err(AppError::Audio(msg)) if msg.contains("checksum") && msg.contains(MODEL_SHA256)
+        ));
+    }
+
+    #[test]
+    fn pinned_hash_is_a_lowercase_sha256_hex_string() {
+        assert_eq!(MODEL_SHA256.len(), 64);
+        assert!(MODEL_SHA256
+            .chars()
+            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)));
+    }
 }

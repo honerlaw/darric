@@ -36,6 +36,7 @@ whisper-rs = { version = "0.14", features = ["metal"] }
 # Model download
 reqwest = { version = "0.12", features = ["stream", "rustls-tls", "json"], default-features = false }
 futures-util = "0.3"
+sha2 = "0.10"
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
