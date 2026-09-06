@@ -215,8 +215,16 @@ length across many small pushes equals the length of one large push.
 1. The `#[ignore]` accuracy test passes against the real large-v3-turbo model: the three silence
    and tail cases produce zero transcript lines and the three speech cases contain the expected
    phrase.
-2. A recording whose output devices carry nothing produces no `output` lines at all, and a
-   spoken sentence on a microphone still produces its line (verified in the running app).
+2. Through the production capture code against real devices — the ignored hardware tests
+   `taps_transcribe_only_the_device_that_played` and `a_microphone_hears_what_the_speakers_play`
+   — an output tap that carried speech produces it verbatim, and a microphone that heard the
+   speech produces its line. Digital silence produces no line (the accuracy test and the CI-run
+   VAD test); that an idle tap delivers digital silence is inferred from the debugging session,
+   not observed by the hardware run, which had one output device. The phase-1 ship report asks
+   the user to make one recording in the app with nothing playing and confirm that no `output`
+   lines appear; phase 2 does not ship until that confirmation is recorded in the scratchpad,
+   and a failed confirmation is a phase-1 defect to fix before phase 2. (Reworded by the
+   2026-09-06 replan; originally "verified in the running app".)
 3. Sixty seconds after a capture device disappears its row reads "failed", not "retrying", and
    the supervisor thread has exited; `should_give_up` has a unit test.
 4. After migration 011 no `settings` row has a key beginning `ai.`; a Rust test proves it.

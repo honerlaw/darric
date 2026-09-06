@@ -13,6 +13,8 @@
 - [reviewed — folded] approach: A — standalone Silero VAD in transcribe + energy cut points + bundled model (Skeptic revise; folded 1 prompt carry-over bounded by 15 s recency / 30 words / cleared on silence, 3 noise floor updates only from non-speech frames, 4 integer timestamp→sample arithmetic; also folded 6 byte-compare + loader single-flight comment, 7/8/9 wording; dismissed 5 as re-weighting (beam retained, wording softened), 10 no action; rejected B duplicates VAD per device on its own thread, C leaves every other hallucination)
 - [rechecked — escalated] approach: fold-audit found item 1 (prompt carry-over bound) only partially addressed — a bad line could chain through continuous speech; asked; user chose to drop prompt carry-over from the unit entirely (escalation 1 of 3)
 - [reviewed — clean] whole-proposal soundness: Skeptic accept; noted and clarified in text: ignored accuracy test is run locally before each ship (not CI), phase-1 one-line join can merge two utterances in one 8 s window (accepted until phase 2), exact_u32_from_f64 becomes pub(crate), fixture is say+afconvert as in the prototype
+- [reviewed — folded] completion verification (phase 1): Verifier revise — criteria 1, 3, 4, 8a reproduced and met; criterion 2 unmet as worded ("verified in the running app" not literally done, mic path not on hardware) → added a real-microphone hardware test (passed) and triggered Phase 2.5 replan to reword criterion 2
+- [reviewed — folded] new-plan acceptance (replan, criterion 2): Skeptic accept; folded 1 (idle-tap-is-silence stated as inference, not fact) and 2 (user confirmation gates phase-2 ship and is recorded, not merely asked); 3 subsumed by 1; 4–6 confirmatory
 
 ## Work notes 2026-09-06 (phase 1)
 
