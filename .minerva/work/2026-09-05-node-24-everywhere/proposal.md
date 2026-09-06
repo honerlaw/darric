@@ -1,7 +1,7 @@
 # Proposal: node-24-everywhere
 
 **Date**: 2026-09-05
-**Status**: Draft
+**Status**: Shipped (2026-09-05)
 
 ## Goal
 
@@ -13,13 +13,13 @@ that place.
 CI already runs Node 24, in four separate `setup-node` steps across two workflows. Nothing else in
 the repo knows that:
 
-| Where | Says |
-| --- | --- |
-| `check.yml` × 3, `release.yml` × 1 | `node-version: 24` |
-| `README.md` prerequisites | `[Node.js](https://nodejs.org/) (v18+)` |
-| `.nvmrc` / `.node-version` / `.tool-versions` | absent — a version manager selects whatever it likes |
-| `package.json` `engines` | absent — npm never warns |
-| `@types/node` | `^25.8.0` — types for a major the project does not run |
+| Where                                         | Says                                                   |
+| --------------------------------------------- | ------------------------------------------------------ |
+| `check.yml` × 3, `release.yml` × 1            | `node-version: 24`                                     |
+| `README.md` prerequisites                     | `[Node.js](https://nodejs.org/) (v18+)`                |
+| `.nvmrc` / `.node-version` / `.tool-versions` | absent — a version manager selects whatever it likes   |
+| `package.json` `engines`                      | absent — npm never warns                               |
+| `@types/node`                                 | `^25.8.0` — types for a major the project does not run |
 
 The README is the proof that this drifts rather than a hypothetical: it still advertises a floor
 six majors below what CI has actually required for some time, and nothing anywhere would have
@@ -57,6 +57,16 @@ and CI follows automatically.
   can be added later if warnings prove insufficient.
 - **Pin `engines` to `^24` / `24.x`.** Rejected because the risk being managed is "too old", not
   "too new" — someone on 25 is fine, someone on 18 is not.
+
+### What changed in review
+
+The README sentence introduced by step (5) claimed `nvm`, fnm, asdf and Volta all select the pinned
+version from `.nvmrc`. Two of the four do not: asdf reads `.nvmrc` only with
+`legacy_version_file = yes` in `~/.asdfrc`, which is off by default, and Volta ignores the file
+entirely — it wants `volta pin node@24` in `package.json`. A contributor on Volta would have
+followed that line, done nothing, and stayed on the wrong Node with no error — the same silent
+class of failure this unit exists to close, reintroduced in its own documentation. The README now
+says which manager does what.
 
 ## Success criteria
 
