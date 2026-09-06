@@ -42,9 +42,9 @@ dependency, and the pane's existing rename is untouched.
 
 Considered and rejected:
 
-- *Extract a shared inline-title editor used by both the pane and the list.* Cleaner, but it
+- _Extract a shared inline-title editor used by both the pane and the list._ Cleaner, but it
   rewrites working pane code for a ~30 line saving and widens a change that should stay small.
-- *Double-click selects the row and opens the pane's heading editor.* Keeps one editor, but
+- _Double-click selects the row and opens the pane's heading editor._ Keeps one editor, but
   the input appears far from where the user double-clicked and does not match the request.
 
 ## Success criteria
