@@ -37,10 +37,8 @@ impl Transcriber {
     /// Load the whisper model at `model_path` and the bundled VAD model.
     ///
     /// Writes the VAD model into the model directory if it is not already
-    /// there byte-for-byte. That write is unsynchronised, which is safe only
-    /// because every production call reaches here through
-    /// `loader::get_or_load`'s single flight; a second, direct caller would
-    /// reintroduce the interleaved-write bug the whisper download once had.
+    /// there byte-for-byte; `vad::ensure_model` serialises that write, so this
+    /// is safe from the loader's single flight and from tests alike.
     pub fn new(model_path: &str) -> Result<Self> {
         let vad_path = vad::ensure_model(&crate::model::model_dir())?;
         let gate = vad::Gate::new(&vad_path)?;
@@ -57,7 +55,7 @@ impl Transcriber {
     /// the input is too short, the detector heard no speech, or whisper produced
     /// only whitespace.
     pub fn transcribe(&self, samples: &[f32]) -> Result<Option<String>> {
-        if samples.len() < MIN_INPUT_SAMPLES {
+        if too_short(samples.len()) {
             log::debug!(
                 "[whisper] {} samples is too short to transcribe",
                 samples.len()
@@ -98,23 +96,64 @@ impl Transcriber {
             .full(params, &speech)
             .map_err(|e| AppError::Transcription(e.to_string()))?;
 
-        let mut text = String::new();
+        let mut pieces = Vec::new();
         for segment in state.as_iter() {
-            let piece = segment
-                .to_str_lossy()
-                .map_err(|e| AppError::Transcription(e.to_string()))?;
-            let piece = piece.trim();
-            if piece.is_empty() {
-                continue;
-            }
-            if !text.is_empty() {
-                text.push(' ');
-            }
-            text.push_str(piece);
+            pieces.push(
+                segment
+                    .to_str_lossy()
+                    .map_err(|e| AppError::Transcription(e.to_string()))?
+                    .into_owned(),
+            );
         }
-        log::debug!("[whisper] {text:?}");
+        let line = join_pieces(pieces.iter().map(String::as_str));
+        log::debug!("[whisper] {line:?}");
+        Ok(line)
+    }
+}
 
-        Ok(if text.is_empty() { None } else { Some(text) })
+/// Whether `len` samples is too little audio to hold a word.
+const fn too_short(len: usize) -> bool {
+    len < MIN_INPUT_SAMPLES
+}
+
+/// Whisper's sub-segments as one line: trimmed, blanks dropped, joined with
+/// single spaces; `None` when nothing is left.
+fn join_pieces<'a>(pieces: impl Iterator<Item = &'a str>) -> Option<String> {
+    let line = pieces
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if line.is_empty() {
+        None
+    } else {
+        Some(line)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sub_segments_become_one_line() {
+        assert_eq!(
+            join_pieces([" the quarterly numbers", "came in above forecast. ", ""].into_iter()),
+            Some("the quarterly numbers came in above forecast.".to_string())
+        );
+    }
+
+    #[test]
+    fn only_whitespace_is_no_line() {
+        assert_eq!(join_pieces(["", "   ", "\n"].into_iter()), None);
+        assert_eq!(join_pieces(std::iter::empty()), None);
+    }
+
+    #[test]
+    fn half_a_second_is_the_floor() {
+        assert!(too_short(0));
+        assert!(too_short(7_999));
+        assert!(!too_short(8_000), "0.5 s at 16 kHz is enough to try");
     }
 }
 
@@ -206,7 +245,22 @@ pub mod fixture {
         );
     }
 
-    /// Pseudo-random noise at RMS `rms`, cast-free — see `vad::tests::noise`.
+    /// The inputs that used to be transcribed as "Thank you." or ".": digital
+    /// silence, low noise at three levels, and two short tails. Shared by the
+    /// VAD gate test (CI) and the model-level accuracy test (ignored).
+    pub fn silent_cases() -> Vec<(&'static str, Vec<f32>)> {
+        vec![
+            ("digital zero, 8 s", vec![0.0; 128_000]),
+            ("noise rms 0.0005, 8 s", noise(128_000, 0.0005)),
+            ("noise rms 0.003, 8 s", noise(128_000, 0.003)),
+            ("noise rms 0.01, 8 s", noise(128_000, 0.01)),
+            ("noise rms 0.003, 0.4 s tail", noise(6_400, 0.003)),
+            ("noise rms 0.003, 1.5 s tail", noise(24_000, 0.003)),
+        ]
+    }
+
+    /// Pseudo-random noise at RMS `rms`, built without a single float cast:
+    /// the generator's top sixteen bits convert to `f32` exactly through `u16`.
     pub fn noise(len: usize, rms: f32) -> Vec<f32> {
         let mut x: u32 = 0x9E37_79B9;
         (0..len)
@@ -227,7 +281,7 @@ pub mod fixture {
 ///   cargo test --manifest-path src-tauri/Cargo.toml -- --ignored --nocapture accuracy
 #[cfg(test)]
 mod accuracy {
-    use super::fixture::{model_path, noise, spoken, EXPECTED_PHRASE};
+    use super::fixture::{model_path, noise, silent_cases, spoken, EXPECTED_PHRASE};
     use super::*;
 
     #[test]
@@ -239,15 +293,7 @@ mod accuracy {
         };
         let t = Transcriber::new(path.to_str().expect("utf-8 path")).expect("load models");
 
-        let silent: Vec<(&str, Vec<f32>)> = vec![
-            ("digital zero, 8 s", vec![0.0; 128_000]),
-            ("noise rms 0.0005, 8 s", noise(128_000, 0.0005)),
-            ("noise rms 0.003, 8 s", noise(128_000, 0.003)),
-            ("noise rms 0.01, 8 s", noise(128_000, 0.01)),
-            ("noise rms 0.003, 0.4 s tail", noise(6_400, 0.003)),
-            ("noise rms 0.003, 1.5 s tail", noise(24_000, 0.003)),
-        ];
-        for (label, samples) in &silent {
+        for (label, samples) in &silent_cases() {
             let line = t.transcribe(samples).expect("transcribe");
             println!("{label}: {line:?}");
             assert_eq!(line, None, "{label} must produce no line");

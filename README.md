@@ -26,10 +26,12 @@ The detector's model (885 KB) is bundled in the app and written to
 Whisper decodes with beam search, and everything it says about one segment lands on one
 transcript line, so a line is roughly one utterance.
 
-A device that stops delivering audio mid-recording — unplugged, or a Continuity iPhone
+A microphone that stops delivering audio mid-recording — unplugged, or a Continuity iPhone
 microphone that went out of range — is rebuilt with backoff for up to a minute and then given
-up on: its row reads `failed` for the rest of the recording, and the other devices carry on. Once
-it is back it is captured again from the next recording, with no toggling needed.
+up on: its row reads `failed` for the rest of the recording, and the other devices carry on. An
+output device is tapped once when the recording starts; if that fails its row reads `failed` too.
+Either way, once the device is back it is captured again from the next recording, with no
+toggling needed.
 
 ## Query darric from Claude
 

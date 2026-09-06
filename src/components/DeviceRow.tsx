@@ -15,6 +15,16 @@ const STATE_TITLE: Record<DeviceState, string> = {
   failed: "Device unavailable — stopped retrying after a minute",
 };
 
+/**
+ * Only microphones are rebuilt with backoff; an output device is tapped once
+ * when the recording starts, so its failure has no retry story to tell.
+ */
+function stateTitle(d: CaptureDevice): string {
+  if (d.state === "failed" && d.direction === "output")
+    return "Could not capture this device's audio";
+  return STATE_TITLE[d.state];
+}
+
 function stateDot(state: DeviceState, enabled: boolean): string {
   if (!enabled) return "bg-ink-4";
   if (state === "active") return "bg-accent";
@@ -68,7 +78,7 @@ export function DeviceRow({ devices, onToggle }: DeviceRowProps): React.JSX.Elem
             className={`h-[6px] w-[6px] shrink-0 rounded-full ${stateDot(d.state, d.enabled)} ${
               d.state === "retrying" ? "pulse-dot" : ""
             }`}
-            title={STATE_TITLE[d.state]}
+            title={stateTitle(d)}
           />
 
           <span

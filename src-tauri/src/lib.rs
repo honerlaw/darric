@@ -16,6 +16,10 @@ use tauri::Manager;
 pub fn run() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("darric_lib=debug"))
         .init();
+    // whisper.cpp otherwise prints straight to stderr — a burst of a dozen
+    // lines per VAD call, per device, every segment. Through `log` it is off
+    // unless RUST_LOG asks for it (e.g. `RUST_LOG=darric_lib=debug,whisper_rs=info`).
+    whisper_rs::install_logging_hooks();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())

@@ -21,6 +21,7 @@ use crate::audio::coreaudio::exact_u32_from_f64;
 use crate::audio::resample::TARGET_RATE;
 use crate::error::{AppError, Result};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use whisper_rs::{WhisperVadContext, WhisperVadContextParams, WhisperVadParams};
 
 /// Silero VAD v5.1.2 in ggml format, from `ggml-org/whisper-vad` (MIT).
@@ -36,6 +37,12 @@ const SAMPLES_PER_CENTISECOND: u64 = (TARGET_RATE / 100) as u64;
 /// decoder still hears a boundary. Matches what `whisper_full` does.
 const GAP_SAMPLES: usize = TARGET_RATE as usize / 10;
 
+/// Serialises [`ensure_model`] across threads. Production reaches it once,
+/// through the loader's single flight, but the ignored tests build several
+/// transcribers in parallel, and two writers sharing one `.tmp` path is the
+/// shape of the bug the whisper download once had.
+static WRITE_LOCK: Mutex<()> = Mutex::new(());
+
 /// Write the bundled model into `dir` unless an identical file is already there.
 ///
 /// Compared byte-for-byte rather than by presence or length: a bare `exists()`
@@ -45,7 +52,15 @@ const GAP_SAMPLES: usize = TARGET_RATE as usize / 10;
 /// leaves either the old file or the new one, never a partial.
 pub fn ensure_model(dir: &Path) -> Result<PathBuf> {
     let path = dir.join(MODEL_FILENAME);
-    if std::fs::read(&path).is_ok_and(|bytes| bytes == MODEL_BYTES) {
+    let up_to_date = || std::fs::read(&path).is_ok_and(|bytes| bytes == MODEL_BYTES);
+    if up_to_date() {
+        return Ok(path);
+    }
+    let _guard = WRITE_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    // A caller that waited on the lock finds the winner's file.
+    if up_to_date() {
         return Ok(path);
     }
     std::fs::create_dir_all(dir)?;
@@ -136,41 +151,17 @@ mod tests {
         assert!(!path.with_extension("tmp").exists(), "no tmp left behind");
     }
 
-    /// Pseudo-random low-level noise — a silent room, or a tap with nothing
-    /// routed to it. Built without a single float cast: the generator's top
-    /// sixteen bits convert to `f32` exactly through `u16`.
-    fn noise(len: usize, rms: f32) -> Vec<f32> {
-        let mut x: u32 = 0x9E37_79B9;
-        (0..len)
-            .map(|_| {
-                x ^= x << 13;
-                x ^= x >> 17;
-                x ^= x << 5;
-                let top = u16::try_from(x >> 16).expect("16 bits fit");
-                // Uniform in [-1, 1], scaled so its RMS is `rms`.
-                let unit = (f32::from(top) / f32::from(u16::MAX)).mul_add(2.0, -1.0);
-                unit * rms * 1.732
-            })
-            .collect()
-    }
-
     /// The bundled model needs no download, so this runs in CI: the exact
     /// inputs that used to become "Thank you." must now be nothing at all.
+    /// The same list feeds the model-level accuracy test, so the two cannot
+    /// drift apart.
     #[test]
     fn silence_and_noise_are_not_speech() {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = ensure_model(dir.path()).expect("model");
         let mut gate = Gate::new(&path).expect("gate");
 
-        let cases: Vec<(&str, Vec<f32>)> = vec![
-            ("digital zero, 8 s", vec![0.0; 128_000]),
-            ("noise rms 0.0005, 8 s", noise(128_000, 0.0005)),
-            ("noise rms 0.003, 8 s", noise(128_000, 0.003)),
-            ("noise rms 0.01, 8 s", noise(128_000, 0.01)),
-            ("noise rms 0.003, 0.4 s tail", noise(6_400, 0.003)),
-            ("noise rms 0.003, 1.5 s tail", noise(24_000, 0.003)),
-        ];
-        for (label, samples) in &cases {
+        for (label, samples) in &crate::transcription::fixture::silent_cases() {
             assert!(
                 gate.speech(samples).expect("vad").is_none(),
                 "{label} must contain no speech"

@@ -68,6 +68,18 @@ describe("DeviceRow", () => {
     expect(container.querySelector('[title*="stopped retrying"]')).not.toBeNull();
   });
 
+  it("does not claim a retry for an output device that could not be tapped", () => {
+    const { container } = render(
+      <DeviceRow
+        devices={[device({ id: "out-1", direction: "output", state: "failed" })]}
+        onToggle={() => undefined}
+      />,
+    );
+    expect(screen.getByText("failed")).toBeInTheDocument();
+    expect(container.querySelector('[title*="retrying"]')).toBeNull();
+    expect(container.querySelector('[title*="Could not capture"]')).not.toBeNull();
+  });
+
   it("does not show a live meter for a device that is not capturing", () => {
     const { container } = render(
       <DeviceRow devices={[device({ enabled: false, level: 0.9 })]} onToggle={() => undefined} />,

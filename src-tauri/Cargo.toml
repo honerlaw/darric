@@ -31,7 +31,7 @@ rusqlite_migration = "1"
 cpal = "0.15"
 
 # Transcription
-whisper-rs = { version = "0.16", features = ["metal"] }
+whisper-rs = { version = "0.16", features = ["metal", "log_backend"] }
 
 # Model download
 reqwest = { version = "0.12", features = ["stream", "rustls-tls", "json"], default-features = false }
