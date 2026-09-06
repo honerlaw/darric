@@ -223,8 +223,10 @@ pub mod fixture {
             let body = &bytes[i + 8..(i + 8 + size).min(bytes.len())];
             if id == b"data" {
                 return body
-                    .chunks_exact(4)
-                    .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|c| f32::from_le_bytes(*c))
                     .collect();
             }
             i += 8 + size + (size & 1);
