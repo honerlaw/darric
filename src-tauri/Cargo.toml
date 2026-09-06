@@ -34,7 +34,11 @@ cpal = "0.15"
 whisper-rs = { version = "0.16", features = ["metal", "log_backend"] }
 
 # Model download
-reqwest = { version = "0.12", features = ["stream", "rustls-tls", "json"], default-features = false }
+# Both root stores: `rustls-tls` is Mozilla's bundle, `rustls-tls-native-roots`
+# is the macOS keychain. A corporate network that inspects TLS (Zscaler and the
+# like) re-signs every connection with a root that lives only in the keychain;
+# with the bundle alone the model download fails before any HTTP happens.
+reqwest = { version = "0.12", features = ["stream", "rustls-tls", "rustls-tls-native-roots", "json"], default-features = false }
 futures-util = "0.3"
 sha2 = "0.10"
 

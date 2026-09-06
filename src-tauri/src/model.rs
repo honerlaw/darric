@@ -1,6 +1,7 @@
 use crate::error::{AppError, Result};
 use futures_util::StreamExt;
 use sha2::{Digest, Sha256};
+use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
 use tauri::{AppHandle, Emitter};
@@ -113,9 +114,12 @@ pub async fn ensure_model(app: &AppHandle) -> Result<PathBuf> {
 }
 
 async fn download(app: &AppHandle, path: &Path) -> Result<()> {
-    let response = reqwest::get(MODEL_URL)
-        .await
-        .map_err(|e| AppError::Audio(format!("model download request failed: {e}")))?;
+    let response = reqwest::get(MODEL_URL).await.map_err(|e| {
+        AppError::Audio(format!(
+            "model download request failed: {}",
+            error_chain(&e)
+        ))
+    })?;
 
     if !response.status().is_success() {
         return Err(AppError::Audio(format!(
@@ -135,7 +139,8 @@ async fn download(app: &AppHandle, path: &Path) -> Result<()> {
     let mut hasher = Sha256::new();
 
     while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| AppError::Audio(format!("download error: {e}")))?;
+        let chunk =
+            chunk.map_err(|e| AppError::Audio(format!("download error: {}", error_chain(&e))))?;
         downloaded += chunk.len() as u64;
         hasher.update(&chunk);
         file.write_all(&chunk).await?;
@@ -176,6 +181,24 @@ async fn download(app: &AppHandle, path: &Path) -> Result<()> {
     tokio::fs::rename(&tmp, path).await?;
 
     Ok(())
+}
+
+/// An error's `Display` followed by every `source()` down the chain, joined
+/// with `: `.
+///
+/// reqwest's `Display` stops at its own layer — "error sending request for url
+/// (…)" — and keeps the cause (a TLS handshake rejected by an unknown issuer, a
+/// refused connection, a DNS failure) in `source()`. That cause is the whole
+/// diagnosis, so the log and the error bar carry the full chain.
+fn error_chain(error: &dyn StdError) -> String {
+    let mut text = error.to_string();
+    let mut cause = error.source();
+    while let Some(next) = cause {
+        text.push_str(": ");
+        text.push_str(&next.to_string());
+        cause = next.source();
+    }
+    text
 }
 
 /// Rejects a download whose length disagrees with the server's Content-Length.
@@ -243,6 +266,55 @@ mod tests {
         assert!(MODEL_SHA256
             .chars()
             .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)));
+    }
+
+    #[derive(Debug)]
+    struct Nested {
+        message: &'static str,
+        cause: Option<Box<Self>>,
+    }
+
+    impl std::fmt::Display for Nested {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(self.message)
+        }
+    }
+
+    impl StdError for Nested {
+        fn source(&self) -> Option<&(dyn StdError + 'static)> {
+            self.cause
+                .as_deref()
+                .map(|cause| cause as &(dyn StdError + 'static))
+        }
+    }
+
+    #[test]
+    fn error_chain_joins_every_source_with_a_colon() {
+        let leaf = Nested {
+            message: "invalid peer certificate: UnknownIssuer",
+            cause: None,
+        };
+        let mid = Nested {
+            message: "client error (Connect)",
+            cause: Some(Box::new(leaf)),
+        };
+        let top = Nested {
+            message: "error sending request",
+            cause: Some(Box::new(mid)),
+        };
+        assert_eq!(
+            error_chain(&top),
+            "error sending request: client error (Connect): invalid peer certificate: UnknownIssuer"
+        );
+    }
+
+    #[test]
+    fn error_chain_of_a_leaf_is_its_display() {
+        let leaf = Nested {
+            message: "refused",
+            cause: None,
+        };
+        assert_eq!(error_chain(&leaf), "refused");
     }
 
     #[test]

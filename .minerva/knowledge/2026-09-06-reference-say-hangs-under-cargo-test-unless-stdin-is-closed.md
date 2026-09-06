@@ -6,6 +6,7 @@
 **Context**: .minerva/work/2026-09-06-transcript-accuracy (see git history if the worktree has been cleaned up)
 
 <!-- superseded-by: 2026-09-06-reference-say-under-cargo-test-needs-a-bounded-child-not-just-closed-stdin -->
+
 > **Superseded by [[2026-09-06-reference-say-under-cargo-test-needs-a-bounded-child-not-just-closed-stdin]]** (2026-09-06)
 
 ## Context
