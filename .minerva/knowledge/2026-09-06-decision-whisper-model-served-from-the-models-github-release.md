@@ -57,3 +57,4 @@ surfacing), and bundling the model in the DMG (1.6 GB per merge to main).
 - [[2026-09-05-reference-model-rs-download-paths-have-no-tests]] — partly outdated by this unit: `model.rs` now carries an inline test block for its pure helpers, while the network paths remain untestable because `MODEL_URL` is still a `const`
 - [[2026-09-06-constraint-make-latest-false-cannot-hide-the-only-full-release]] — why the release is a prerelease
 - [[2026-09-06-reference-an-isolated-home-gives-a-clean-first-launch]] — how the download was exercised end to end without touching the real cache
+- [[2026-09-06-bug-webpki-only-roots-rejected-zscaler-tls-inspection]] — see also

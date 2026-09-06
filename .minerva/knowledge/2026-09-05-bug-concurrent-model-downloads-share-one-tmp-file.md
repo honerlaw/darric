@@ -61,3 +61,4 @@ finished rather than starting its own.
 - [[2026-09-05-reference-model-rs-download-paths-have-no-tests]] — see also
 - [[2026-09-06-decision-whisper-model-served-from-the-models-github-release]] — see also
 - [[2026-09-06-bug-whisper-transcribes-silence-as-thank-you]] — see also
+- [[2026-09-06-bug-webpki-only-roots-rejected-zscaler-tls-inspection]] — see also

@@ -29,6 +29,7 @@
 - [[2026-09-05-bug-the-session-start-guard-is-check-then-act]] — `start_session` / `resume_session` check `engine.is_some()` at the top but install the engine only after the model load, so two commands could both pass and the second's engine silently replaced the first — whose threads and whisper workers then ran until the app quit
 - [[2026-09-06-bug-an-empty-page-with-no-cursor-restarts-the-poll-loop]] — `get_transcript` returned `next_cursor: null` on an empty page while telling the agent to pass `next_cursor` back, so a quiet poll restarted the transcript from line one; an empty page now echoes the caller's cursor
 - [[2026-09-06-bug-capture-stamps-drifted-after-a-delivery-gap]] — `started_at` was set only when the buffer was empty, and a pause cut never empties it, so after a rebuilt stream every later stamp extrapolated from the session's first callback; fixed by re-anchoring when a chunk arrives >100 ms late
+- [[2026-09-06-bug-webpki-only-roots-rejected-zscaler-tls-inspection]] — reqwest's `rustls-tls` feature trusts only Mozilla's bundle, so a network that re-signs TLS with a keychain-only root fails the handshake and reqwest's Display hides the cause
 - [[2026-09-06-bug-whisper-transcribes-silence-as-thank-you]] — 8 s of digital zeros through large-v3-turbo decodes to "Thank you." at token probability 0.75; fixed by a Silero VAD gate in front of whisper, not by whisper.cpp's thresholds
 
 ## Patterns
