@@ -123,14 +123,14 @@ private to that module and is moved to `pub(crate)` rather than duplicated) and 
 
 Prototype results (scratch crate on whisper-rs 0.16, real large-v3-turbo, Metal):
 
-| Input | VAD kept | Result |
-| --- | --- | --- |
-| 8 s digital zero | 0 of 8.00 s | skipped, 19 ms |
-| 8 s noise RMS 0.003 | 0 of 8.00 s | skipped, 26 ms |
-| 1.5 s noise tail | 0 of 1.50 s | skipped, 5 ms |
-| 8.6 s speech synthesized with `say` + `afconvert` | 8.56 s | verbatim |
-| same, 3 s silence each side | 8.58 of 14.62 s | verbatim |
-| same plus noise RMS 0.01 | 8.43 s | verbatim |
+| Input                                             | VAD kept        | Result         |
+| ------------------------------------------------- | --------------- | -------------- |
+| 8 s digital zero                                  | 0 of 8.00 s     | skipped, 19 ms |
+| 8 s noise RMS 0.003                               | 0 of 8.00 s     | skipped, 26 ms |
+| 1.5 s noise tail                                  | 0 of 1.50 s     | skipped, 5 ms  |
+| 8.6 s speech synthesized with `say` + `afconvert` | 8.56 s          | verbatim       |
+| same, 3 s silence each side                       | 8.58 of 14.62 s | verbatim       |
+| same plus noise RMS 0.01                          | 8.43 s          | verbatim       |
 
 `transcription::bench` grows an `#[ignore]` accuracy test that runs those six cases through
 `Transcriber::transcribe` and asserts the three silent ones yield zero lines and the three

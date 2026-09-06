@@ -57,10 +57,15 @@ pub fn download_progress() -> Option<u32> {
     u32::try_from(DOWNLOAD_PCT.load(Ordering::Relaxed)).ok()
 }
 
-pub fn default_model_path() -> PathBuf {
+/// The directory every model file lives in — the whisper model downloaded by
+/// [`ensure_model`] and the VAD model `transcription::vad` writes out.
+pub fn model_dir() -> PathBuf {
     let home = std::env::var("HOME").map_or_else(|_| PathBuf::from("/tmp"), PathBuf::from);
     home.join("Library/Application Support/darric")
-        .join(MODEL_FILENAME)
+}
+
+pub fn default_model_path() -> PathBuf {
+    model_dir().join(MODEL_FILENAME)
 }
 
 pub async fn ensure_model(app: &AppHandle) -> Result<PathBuf> {

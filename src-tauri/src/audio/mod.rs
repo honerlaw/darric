@@ -322,6 +322,159 @@ fn chunk_payload(session_id: &str, line: &TranscribedLine, now: &str) -> serde_j
     })
 }
 
+/// The reported bug, against real hardware: every output device is tapped at
+/// once, the spoken fixture is played through the default output, and only
+/// that device's tap may produce a line. The taps that carried nothing used to
+/// say "Thank you." every eight seconds.
+///
+/// Ignored by default: it needs the whisper model, macOS speech synthesis, the
+/// audio-capture permission on the process running it, and a machine with at
+/// least one output device. Run with:
+///   cargo test --manifest-path src-tauri/Cargo.toml --lib taps_transcribe -- --ignored --nocapture
+#[cfg(test)]
+mod hardware {
+    use super::*;
+    use crate::transcription::fixture::{model_path, spoken_wav, EXPECTED_PHRASE};
+
+    #[test]
+    #[ignore = "taps real output devices and plays audio through the default one"]
+    fn taps_transcribe_only_the_device_that_played() {
+        let Some(path) = model_path() else {
+            println!("no model present — skipping");
+            return;
+        };
+        let transcriber = Transcriber::new(path.to_str().expect("utf-8 path")).expect("models");
+        let (_dir, wav) = spoken_wav();
+
+        let outputs = device::list_output_devices(&ExclusionRegistry::new());
+        assert!(!outputs.is_empty(), "no output devices to tap");
+
+        let mut taps = Vec::new();
+        for dev in &outputs {
+            let captured: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::new()));
+            let sink_buf = Arc::clone(&captured);
+            let tap = OutputTap::start(&dev.id, &dev.name, move |samples| {
+                sink_buf
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .extend_from_slice(samples);
+            })
+            .unwrap_or_else(|e| panic!("tapping {}: {e}", dev.name));
+            taps.push((dev.name.clone(), tap, captured));
+        }
+
+        // `afplay` goes to the default output and blocks until the file ends.
+        let ok = std::process::Command::new("afplay")
+            .arg(&wav)
+            .stdin(std::process::Stdio::null())
+            .status()
+            .expect("run `afplay`")
+            .success();
+        assert!(ok, "`afplay` failed");
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        let mut heard: Vec<(String, String)> = Vec::new();
+        for (name, tap, captured) in taps {
+            drop(tap);
+            let samples = captured
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone();
+            let line = transcriber.transcribe(&samples).expect("transcribe");
+            println!("{name}: {} samples -> {line:?}", samples.len());
+            if let Some(text) = line {
+                heard.push((name, text));
+            }
+        }
+
+        assert_eq!(
+            heard.len(),
+            1,
+            "exactly one output device carried the speech: {heard:?}"
+        );
+        assert!(
+            heard[0].1.to_lowercase().contains(EXPECTED_PHRASE),
+            "the tap that heard it transcribed it: {heard:?}"
+        );
+    }
+    /// The microphone half of the same check, through the production cpal
+    /// supervisor and resampler: every input device is captured while the
+    /// fixture plays through the default output, and at least one microphone
+    /// must hear it and transcribe it. Needs a default output that a microphone
+    /// can hear — the built-in speakers, not headphones.
+    #[test]
+    #[ignore = "captures real microphones while playing audio through the default output"]
+    fn a_microphone_hears_what_the_speakers_play() {
+        let Some(path) = model_path() else {
+            println!("no model present — skipping");
+            return;
+        };
+        let transcriber = Transcriber::new(path.to_str().expect("utf-8 path")).expect("models");
+        let (_dir, wav) = spoken_wav();
+
+        let inputs = device::list_input_devices(&ExclusionRegistry::new());
+        assert!(!inputs.is_empty(), "no input devices to capture");
+
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let mut sources = Vec::new();
+        for dev in &inputs {
+            let captured: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::new()));
+            let status: SharedStatus = Arc::new(Mutex::new(SourceStatus::new(dev.clone())));
+            let sink_buf = Arc::clone(&captured);
+            let dev_for_thread = dev.clone();
+            let status_for_thread = Arc::clone(&status);
+            let shutdown_for_thread = Arc::clone(&shutdown);
+            let handle = std::thread::spawn(move || {
+                source::run_source(
+                    &dev_for_thread,
+                    &status_for_thread,
+                    &shutdown_for_thread,
+                    move |samples| {
+                        sink_buf
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .extend_from_slice(samples);
+                    },
+                );
+            });
+            sources.push((dev.name.clone(), handle, captured));
+        }
+        // Let the streams come up before the audio starts.
+        std::thread::sleep(std::time::Duration::from_secs(2));
+
+        let ok = std::process::Command::new("afplay")
+            .arg(&wav)
+            .stdin(std::process::Stdio::null())
+            .status()
+            .expect("run `afplay`")
+            .success();
+        assert!(ok, "`afplay` failed");
+        std::thread::sleep(std::time::Duration::from_secs(1));
+        shutdown.store(true, Ordering::SeqCst);
+
+        let mut heard: Vec<(String, String)> = Vec::new();
+        for (name, handle, captured) in sources {
+            handle.join().expect("capture thread");
+            let samples = captured
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone();
+            let line = transcriber.transcribe(&samples).expect("transcribe");
+            println!("{name}: {} samples -> {line:?}", samples.len());
+            if let Some(text) = line {
+                heard.push((name, text));
+            }
+        }
+
+        assert!(
+            heard
+                .iter()
+                .any(|(_, text)| text.to_lowercase().contains(EXPECTED_PHRASE)),
+            "some microphone must have heard and transcribed the speech: {heard:?}"
+        );
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

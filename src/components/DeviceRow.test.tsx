@@ -58,6 +58,16 @@ describe("DeviceRow", () => {
     expect(screen.getByText("retrying")).toBeInTheDocument();
   });
 
+  it("shows a device the recorder gave up on, and says why", () => {
+    // After a minute of failed rebuilds the backend stops retrying. That must
+    // not look like a healthy idle device.
+    const { container } = render(
+      <DeviceRow devices={[device({ state: "failed" })]} onToggle={() => undefined} />,
+    );
+    expect(screen.getByText("failed")).toBeInTheDocument();
+    expect(container.querySelector('[title*="stopped retrying"]')).not.toBeNull();
+  });
+
   it("does not show a live meter for a device that is not capturing", () => {
     const { container } = render(
       <DeviceRow devices={[device({ enabled: false, level: 0.9 })]} onToggle={() => undefined} />,

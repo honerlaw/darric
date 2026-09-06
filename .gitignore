@@ -21,6 +21,9 @@ tsconfig*.tsbuildinfo
 
 # ML model files (whisper, etc.)
 ggml-*.bin
+# The one model that ships inside the app: 885 KB, bundled so it never needs a
+# download (see src-tauri/src/transcription/vad.rs).
+!src-tauri/models/ggml-silero-v5.1.2.bin
 *.gguf
 
 # Editor directories and files
