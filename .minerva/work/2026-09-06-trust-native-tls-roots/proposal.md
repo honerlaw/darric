@@ -1,7 +1,7 @@
 # Proposal: trust-native-tls-roots
 
 **Date**: 2026-09-06
-**Status**: Draft
+**Status**: Shipped (2026-09-06)
 
 ## Goal
 
@@ -24,6 +24,9 @@ was this same certificate rejection. See [[2026-09-06-decision-whisper-model-ser
 
 ## Approach
 
+What shipped. See [[2026-09-06-bug-webpki-only-roots-rejected-zscaler-tls-inspection]] for the
+record.
+
 1. **`src-tauri/Cargo.toml`.** Add `rustls-tls-native-roots` to reqwest's features and keep
    `rustls-tls`. With both on, reqwest fills the root store from the platform store via
    `rustls_native_certs::load_native_certs()` **and** from `webpki-roots`, so a machine whose
@@ -36,7 +39,11 @@ was this same certificate rejection. See [[2026-09-06-decision-whisper-model-ser
    UnknownIssuer" instead of stopping at the first clause. Unit-test the helper with a nested
    error.
 3. **README.** One sentence: the download trusts the system keychain, so corporate TLS
-   inspection works as long as its root is installed there.
+   inspection works as long as its root is installed there — and `SSL_CERT_FILE` is unset in
+   the launching shell, since `rustls-native-certs` reads that instead of the keychain. The
+   same caveat sits in the `Cargo.toml` comment.
+4. **Also in this PR.** One Prettier fix to a knowledge entry that reached main through a
+   reconciliation merge, which fires no CI (#44), so `npm run format` was red on main.
 
 ### Candidate approaches considered
 
