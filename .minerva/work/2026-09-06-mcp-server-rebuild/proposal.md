@@ -1,7 +1,7 @@
 # Proposal: mcp-server-rebuild
 
 **Date**: 2026-09-06
-**Status**: Draft
+**Status**: Shipped (2026-09-06)
 
 ## Goal
 
@@ -13,10 +13,10 @@ port 27842, endpoint `/mcp`, with a small status chip in the header.
 ## Why
 
 PR #1 shipped an MCP server in May against the old notes-and-tasks schema
-(`.minerva/work/2026-05-19-mcp-server/proposal.md`), and PR #7 deleted it when darric was stripped to a recorder. The
-recorder now produces the one thing worth analyzing: device-attributed transcripts. Exposing
-them over MCP lets the Claude subscription the user already pays for do the analysis, with no
-in-app AI and no token spend by darric.
+(`.minerva/work/2026-05-19-mcp-server/proposal.md`), and PR #7 deleted it when darric was
+stripped to a recorder. The recorder now produces the one thing worth analyzing:
+device-attributed transcripts. Exposing them over MCP lets the Claude subscription the user
+already pays for do the analysis, with no in-app AI and no token spend by darric.
 
 In-process rather than a standalone file reader because one process is preferred and live state
 such as which session is recording is wanted. Every transcript line is committed to SQLite the
@@ -25,152 +25,150 @@ a meeting in progress is queryable line by line with no extra plumbing.
 
 ## Approach
 
+What shipped. See [[2026-09-06-decision-mcp-server-rebuilt-in-process-on-rmcp-3]] for the
+decision record.
+
 ### Dependencies
 
-rmcp 3.2 with features `server`, `macros`, `transport-streamable-http-server`, `schemars`;
-schemars 1.0; axum 0.8; tokio-util 0.7. rmcp 3.2 validates the `Host` header by default against
-`localhost`, `127.0.0.1` and `::1`, which is the DNS-rebinding floor
-[[2026-05-19-decision-rmcp-as-mcp-sdk]] required, so the default is kept and
-`disable_allowed_hosts` is never called.
-
-The four standing MCP knowledge decisions carry over unchanged: rmcp as the SDK,
+rmcp 3.2 (`server`, `macros`, `transport-streamable-http-server`, `schemars`), schemars 1.0,
+axum 0.8, tokio-util 0.7. rmcp 3.2's `StreamableHttpServerConfig::default()` validates the
+`Host` header against `localhost`, `127.0.0.1` and `::1`; that default is kept and
+`disable_allowed_hosts` is never called, which is the DNS-rebinding floor
+[[2026-05-19-decision-rmcp-as-mcp-sdk]] required. The four May decisions carry over unchanged:
 `spawn_blocking` around every rusqlite call
 ([[2026-05-19-decision-spawn-blocking-for-rusqlite-tools]]), the explicit
 `#[tool_handler(router = self.tool_router)]` form
-([[2026-05-19-decision-tool-handler-router-pattern]]), and inline `#[cfg(test)]` tests
-([[2026-05-19-decision-inline-tests-for-mcp-queries]]). rmcp 3.2 still exposes every name that
-form depends on: `StreamableHttpService`, `StreamableHttpServerConfig::with_cancellation_token`,
-`LocalSessionManager`, and the `Parameters` wrapper.
+([[2026-05-19-decision-tool-handler-router-pattern]]), and inline tests
+([[2026-05-19-decision-inline-tests-for-mcp-queries]]).
+
+For the protocol test, rmcp's streamable-HTTP client is implemented for reqwest 0.13 while the
+model downloader is on 0.12, so the test takes a renamed `reqwest13` dev-dependency
+([[2026-09-06-reference-rmcp-3-streamable-http-client-needs-reqwest-0-13]]).
 
 ### Shared query layer
 
-New `src-tauri/src/db/sessions.rs` owns the `Session` and `TranscriptLine` structs and four
-functions over a `&rusqlite::Connection`:
+`src-tauri/src/db/sessions.rs` owns `Session` and `TranscriptLine` and the SQL over them:
+`list_sessions(conn, limit, offset)`, `get_session`, `transcript_lines` (capture order, for
+display), `transcript_page` (rowid order, for the cursor), and `search`. `commands/sessions.rs`
+keeps its Tauri commands but calls these. `TranscriptLine` carries `seq`, the SQLite rowid; the
+frontend type mirrors it as `seq: number | null`, null on a line the transcript hook appends live
+from a `transcript_chunk`, which has no rowid until the transcript reloads.
 
-- `list_sessions(conn, limit, offset)` — newest first, with `recorded_minutes` and
-  `in_progress` (`ended_at IS NULL`).
-- `get_session(conn, id)` — one session or `None`.
-- `transcript_page(conn, session_id, after: Option<i64>, limit)` — lines in rowid order,
-  returning `next_cursor` and `has_more`.
-- `search(conn, query, session_id: Option<&str>, limit)` — matching lines with their session's
-  id, topic and `started_at`, newest first.
-
-`commands/sessions.rs` keeps its Tauri commands but calls these instead of holding SQL inline.
-`TranscriptLine` gains `seq: i64`, the SQLite rowid, mirrored as `seq: number` in
-`src/types/index.ts`. It is the stable per-line key the UI currently lacks, and it is what the
-MCP cursor and search hits carry.
+Inline tests build their schema with `db::test_db()`, one helper over the production migration
+list, replacing the per-file `include_str!` chains
+([[2026-09-06-decision-one-test-db-helper-built-from-the-production-migration-list]]).
 
 ### Own read-only connection
 
-`db::open` splits into `db::path() -> PathBuf` and `db::open()`. After the app connection has
-run migrations in `setup`, the server opens the same file with `SQLITE_OPEN_READ_ONLY` behind its
-own `Mutex`, and never runs migrations. The recorder's inserts never wait on an agent query, and
-read-only is enforced by SQLite rather than by convention. `spawn_blocking` still wraps every
-query: the connection is the server's own, but rusqlite is still blocking I/O on a Tokio
-runtime that also drives capture.
+`db::open` is split into `db::path()`, `db::open_at()` and `db::open_read_only()`. After the app
+connection has migrated in `setup`, the server opens the same file with
+`SQLITE_OPEN_READ_ONLY | SQLITE_OPEN_NO_MUTEX` behind its own mutex and never runs migrations.
+The recorder's inserts never wait on an agent query, and read-only is enforced by SQLite
+([[2026-09-06-decision-mcp-server-reads-through-its-own-read-only-connection]]). Every query
+still goes through `spawn_blocking`.
 
 ### Cursor
 
-Transcript paging is by rowid, not `recorded_at`. The rowid is assigned under the insert mutex,
-is monotonic, and never ties, so "everything after cursor N" is exact even when two devices land
-lines in the same millisecond, and it is race-free where `recorded_at` is not: a worker computes
-`Utc::now()` before taking the lock, so two lines can be timestamped in one order and inserted in
-the other.
+`get_transcript` pages by rowid: assigned under the insert mutex, monotonic, never tied, and
+race-free where `recorded_at` is not. An empty page echoes the caller's cursor rather than
+returning `None`, so a poll loop can always pass `next_cursor` straight back
+([[2026-09-06-bug-an-empty-page-with-no-cursor-restarts-the-poll-loop]]).
 
-`transcript_lines` has a `TEXT PRIMARY KEY`, so its rowid is implicit and is reassigned whenever
-the table is rebuilt: by `VACUUM`, which nothing in darric runs, and by a create-copy-drop-rename
-migration, which migration 010 already is and which any future `CHECK` change would be again. A
-cursor is therefore valid only for the life of the app process: a rebuild can only ever run
-inside `db::open` at startup, on the one launch that applies a new migration, before the server
-exists, and a restart drops every MCP session anyway, so no live cursor survives into a
-renumbered table. The tool description states that a cursor must not be persisted across
-darric restarts. If cursors ever need to outlive a restart, they must move to an explicit
-`INTEGER` column first.
-
-Rowid order is insertion order, which is transcription-completion order, not speech order: with
-two devices in one session, whichever whisper worker finishes first lands first. Each line
-carries `recorded_at` so a caller can re-sort by capture time, and the `get_transcript`
-description says so.
+`transcript_lines` has a `TEXT` primary key, so its rowid is implicit and is reassigned by
+`VACUUM` or by a create-copy-drop-rename migration such as 010. Both can only run inside
+`db::open` at startup, before the server exists, and a restart drops every MCP session, so a
+cursor is valid for the life of the app process and the tool description says not to persist
+one ([[2026-09-06-constraint-a-table-rebuild-renumbers-transcript-rowids-and-every-mcp-cursor]]).
+Rowid order is transcription-completion order, not speech order, across devices; each line
+carries `recorded_at` and the description says so.
 
 ### Server module
 
-- `src-tauri/src/mcp_server/mod.rs` — binds `127.0.0.1:27842`, mounts rmcp's streamable HTTP
-  service under axum at `/mcp`, and returns an `McpServerHandle` whose `Drop` cancels the serve
-  task via a `CancellationToken`.
-- `src-tauri/src/mcp_server/service.rs` — `DarricService` holding the read-only connection, an
-  `Arc<dyn LiveStatus>`, and the `ToolRouter`.
-- `LiveStatus` is a trait with one method returning the recorder snapshot: whether an engine is
-  installed, its session id, the per-device statuses, and the dropped-segment count. Production
-  implements it on a struct holding the Tauri `AppHandle`, reading `AppState.engine` under a
-  short lock. The `status` tool then fills in the live session's `topic` and `started_at` from
-  its own read-only connection, since `CaptureEngine` exposes only the session id. Tests pass a
-  stub, because `AppHandle` cannot be constructed in one.
+- `src-tauri/src/mcp_server/mod.rs` — `bind(port)` binds a std listener synchronously so
+  `setup` learns the outcome before it returns; `serve(listener, db, live)` returns an
+  `McpServerHandle` (whose `Drop` cancels) plus the serve future, which adopts the listener into
+  Tokio and mounts rmcp's streamable HTTP service under axum at `/mcp`. The caller spawns the
+  future on its own runtime ([[2026-09-06-constraint-tauri-setup-runs-outside-the-tokio-runtime]]).
+- `src-tauri/src/mcp_server/service.rs` — `DarricService` with the read-only connection, an
+  `Arc<dyn LiveStatus>`, and the tool router.
+- `LiveStatus::snapshot` returns the engine's session id, per-device statuses and dropped
+  count. Production implements it on `AppLiveStatus(AppHandle)` in `commands/mcp_server.rs`;
+  the `status` tool fills in the live session's topic and `started_at` from its own connection.
+  Tests pass a stub.
 
 ### Tools
 
-| Tool             | Arguments                                                         | Returns                                                                                                                                             |
-| ---------------- | ----------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `status`         | none                                                              | `recording: bool`; live session `id`, `topic`, `started_at` or `null`; per-device `id`, `name`, `direction`, `state`; `dropped_segments`            |
-| `list_sessions`  | `limit?` (default 50, max 500), `offset?` (default 0)             | newest first: `id`, `topic`, `started_at`, `ended_at`, `recorded_minutes`, `in_progress`                                                            |
-| `get_transcript` | `session_id`, `after?` (cursor), `limit?` (default 500, max 2000) | the session header; `lines[]` of `seq`, `device_id`, `device_name`, `direction`, `content`, `recorded_at` in rowid order; `next_cursor`; `has_more` |
-| `search`         | `query`, `limit?` (default 50, max 200), `session_id?`            | `hits[]` of `seq`, `session_id`, `topic`, `started_at`, `device_name`, `direction`, `content`, `recorded_at`, newest first                          |
+| Tool             | Arguments                                                | Returns                                                                                                                                    |
+| ---------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `status`         | none                                                     | `recording`; live session `id`, `topic`, `started_at` or `null`; per-device `id`, `name`, `direction`, `state`; `dropped_segments`         |
+| `list_sessions`  | `limit?` (default 50, max 500), `offset?`                | `sessions[]` newest first: `id`, `topic`, `started_at`, `ended_at`, `recorded_minutes`, `in_progress`                                      |
+| `get_transcript` | `session_id`, `after?`, `limit?` (default 500, max 2000) | `session`; `lines[]` of `seq`, `device_id`, `device_name`, `direction`, `content`, `recorded_at` in rowid order; `next_cursor`; `has_more` |
+| `search`         | `query`, `limit?` (default 50, max 200), `session_id?`   | `sessions[]` whose topic matched and `lines[]` whose content matched (newest first, each with `seq`, `session_id`, `topic`, `started_at`)  |
 
-- `search` is a case-insensitive `LIKE` over line content and session topic only, never device
-  names. `%` and `_` in the query are escaped so a literal underscore does not become a wildcard.
+- `search` is a `LIKE` over line content and session topic, case-insensitive for ASCII only:
+  SQLite's `lower()` is ASCII-only, so the query is folded with `to_ascii_lowercase` to match.
+  `%`, `_` and `\` are escaped. Device names are never matched. A topic match is a session, not
+  every line of it, which is why the result is `{ sessions, lines }` rather than one `hits[]`.
 - An unknown `session_id` and an empty `query` return `invalid_params`; a database failure
-  returns `internal_error`.
-- All responses are JSON via `serde_json::Value`, as PR #1 did.
-- The `status` tool's description states that during the flush after Stop it reports
-  `recording: false` while `list_sessions` still shows the session `in_progress`, because
-  `stop_session` takes the engine out on entry and writes `ended_at` only after whisper drains
+  returns `internal_error`. Limits are clamped to `[1, max]`.
+- The `status` description notes that during the flush after Stop it reports
+  `recording: false` while `list_sessions` still shows the session `in_progress`
   ([[2026-09-05-reference-stop-session-releases-the-engine-before-teardown]]).
 
 ### Lifecycle
 
-In `lib.rs::run`'s `setup`, after `app.manage(state)`, spawn the server and store the outcome in
-a new `AppState.mcp_server: Mutex<McpServerState>` field: `Listening(McpServerHandle)` or
-`Failed(String)`. A busy port logs the error and the app runs normally without the endpoint. The
-handle lives as long as `AppState`, so the server stops when the app exits.
-
-A new `commands/mcp_server.rs::mcp_server_status` command returns `{ listening, port, url,
-error }`. The frontend calls it once on mount rather than listening for an event, because events
-emitted during `setup` reach no webview
+`lib.rs::start_mcp_server` runs after `app.manage(state)` and stores the outcome in
+`AppState.mcp_server: Mutex<McpServerState>` — `Listening(handle)`, `PortBusy(reason)` when the
+bind failed, or `Failed(reason)` for anything else. The app runs normally without the endpoint
+in either failure. `commands/mcp_server.rs::mcp_server_status` returns
+`{ listening, port, url, port_busy, error }`; the frontend reads it once on mount, because
+events emitted during `setup` reach no webview
 ([[2026-09-05-constraint-tauri-events-from-setup-reach-no-webview]]).
 
 ### Chip
 
-`src/components/McpChip.tsx`, rendered in `Header` left of the recording indicator. Hidden until
-status resolves. When listening it reads `MCP · :27842`; clicking writes
+`src/components/McpChip.tsx`, rendered in `Header` left of the recording indicator through a
+`mcpStatus` prop fed by `useMcpServer`. Hidden until status resolves. Listening: a button reading
+`MCP · :27842` that copies `claude mcp add --transport http darric http://127.0.0.1:27842/mcp`
+via `navigator.clipboard.writeText` and reads "Copied" for two seconds. Port busy:
+`MCP · port busy`; any other failure: `MCP · off`; both carry the reason as `title`.
 
-```
-claude mcp add --transport http darric http://127.0.0.1:27842/mcp
-```
+### Accepted tradeoffs
 
-to the clipboard through `navigator.clipboard.writeText`, which PR #1 shipped from the same
-webview, and the chip reads "Copied" for two seconds. When bind failed it reads
-`MCP · port busy` with the error as its `title`. A new `src/lib/tauri.ts` wrapper and a
-`useMcpServer` hook carry the status.
+- Loopback means any local account on this machine can reach the endpoint, unauthenticated —
+  a broader reach than the user-owned database file. Stated in the README.
+- No retry on a busy port short of relaunching.
+- Search is ASCII case-insensitive; full Unicode folding would need ICU, which the bundled
+  SQLite lacks.
 
 ### Tests
 
-- Inline tests in `db/sessions.rs` for paging, cursor exactness across interleaved devices,
-  search escaping, the `session_id` filter, and the `in_progress` flag. The test helper builds
-  its in-memory database from `db::migrations::migrations()` (made `pub(crate)`) rather than a
-  second hand-maintained `include_str!` list, so a new migration cannot leave the helper behind.
-- One protocol round-trip test in `mcp_server` using rmcp's client under `[dev-dependencies]`
-  (features `client`, `transport-streamable-http-client-reqwest`): spawn on port 0 against a
-  temp-file database seeded through a separate writer connection with one session and three
-  lines, plus a stub `LiveStatus`; initialize; assert the tool list is exactly `status`,
-  `list_sessions`, `get_transcript`, `search`; call `list_sessions` and `get_transcript` and
-  check the seeded rows come back. Then, with the server still running, insert a fourth line
-  through the writer connection and call `get_transcript` with the returned `next_cursor`,
-  asserting exactly that line comes back. This is the read-only-handle-sees-concurrent-WAL-commits
-  assumption that the live-meeting criterion rests on, exercised rather than assumed.
+- `db/sessions.rs`: paging in insertion order with an exact cursor, cursor echo on an empty
+  page, session scoping, display order, LIKE escaping, ASCII folding on both sides,
+  case-insensitivity and ordering, topic-as-session, session filter, device names never matched,
+  list paging, `in_progress`.
+- `mcp_server/mod.rs`: `bind` refuses a held port; a protocol round trip with rmcp's client
+  against a temp-file database — tool list is exactly the four, `status` names the live session,
+  `list_sessions` and `get_transcript` return seeded rows, then a fourth line inserted through
+  the writer while the server is up comes back alone through the cursor, `search` finds a line,
+  an unknown session is a protocol error.
+- `mcp_server/service.rs`: `status` with no engine.
+- `McpChip.test.tsx`: hidden, listening + copy, copied timeout, port busy, off, command text.
+  `Header.test.tsx`: the chip renders through the header once status is known.
+  `App.test.tsx` mocks `mcp_server_status`.
+
+### Verification
+
+Against the debug binary and the real database: the raw streamable-HTTP handshake and
+`tools/list`; `status` and `list_sessions` answering from real recordings; `Host: evil.example`
+rejected with 403; `claude mcp add --transport http …` then `claude mcp list` showing
+`✔ Connected` (entry removed afterwards); a second instance launched while the first held
+27842 logging `not started, port busy` and staying up.
 
 ### Docs
 
-A README section "Query darric from Claude" with the `claude mcp add` line, the four tools in
-one sentence each, and a note that the server is loopback-only and read-only.
+README section "Query darric from Claude": the `claude mcp add` line, the four tools, loopback
+and read-only, local-account reach, `port busy` versus `off`, ASCII search, transcription order.
 
 ## Success criteria
 
