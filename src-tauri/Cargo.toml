@@ -28,7 +28,7 @@ rusqlite = { version = "0.32", features = ["bundled", "chrono", "uuid"] }
 rusqlite_migration = "1"
 
 # Audio capture
-cpal = "0.15"
+cpal = "0.18"
 
 # Transcription
 whisper-rs = { version = "0.16", features = ["metal", "log_backend"] }

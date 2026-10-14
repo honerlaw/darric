@@ -79,6 +79,18 @@ pub fn list_output_devices(excluded: &ExclusionRegistry) -> Vec<CaptureDevice> {
         .collect()
 }
 
+/// The name a cpal device is known by: its id in this app, persisted in
+/// `capture.disabled_devices` and on every transcript line.
+///
+/// This is cpal's human-readable description name, deliberately not its newer
+/// stable `id()`. Both read Core Audio's `kAudioDevicePropertyDeviceNameCFString`
+/// (the pre-0.17 `name()` did too, so the strings are byte-identical across the
+/// upgrade), and switching to `id()` would silently orphan every device a user
+/// has already disabled.
+pub fn device_name(device: &cpal::Device) -> Option<String> {
+    device.description().ok().map(|d| d.name().to_string())
+}
+
 /// Every input device the host reports, minus anything this process created.
 ///
 /// A device whose name cannot be read is skipped rather than given a
@@ -94,7 +106,7 @@ pub fn list_input_devices(excluded: &ExclusionRegistry) -> Vec<CaptureDevice> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for device in devices {
-        let Ok(name) = device.name() else {
+        let Some(name) = device_name(&device) else {
             log::warn!("[devices] skipping an input device with an unreadable name");
             continue;
         };
@@ -149,6 +161,12 @@ mod tests {
     #[ignore = "enumerates real audio hardware"]
     fn enumeration_yields_unique_stable_ids() {
         let devices = list_input_devices(&ExclusionRegistry::new());
+        // Printed so a cpal upgrade can be checked for renamed devices: the
+        // name is the id persisted in `capture.disabled_devices` and on every
+        // transcript line, so a changed string silently orphans both.
+        for d in &devices {
+            println!("input device: {:?}", d.name);
+        }
         let ids: HashSet<&str> = devices.iter().map(|d| d.id.as_str()).collect();
         assert_eq!(ids.len(), devices.len(), "ids must be unique");
         assert!(devices.iter().all(|d| d.direction == Direction::Input));

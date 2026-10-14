@@ -54,7 +54,7 @@ filed as a follow-up.
    after to show it passes.
 3. **Device-attributed whisper logs.** `Transcriber::transcribe` gains a `source: &str`
    parameter used in its per-segment debug lines (`too short`, `no speech`, `N of M samples are
-   speech`, the final line). The pool passes `job.device_name`, and test call sites pass a
+speech`, the final line). The pool passes `job.device_name`, and test call sites pass a
    fixed label.
 
 ### Candidate approaches considered

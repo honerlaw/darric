@@ -389,7 +389,7 @@ mod hardware {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .clone();
-            let line = transcriber.transcribe(&samples).expect("transcribe");
+            let line = transcriber.transcribe(&name, &samples).expect("transcribe");
             println!("{name}: {} samples -> {line:?}", samples.len());
             if let Some(text) = line {
                 heard.push((name, text));
@@ -468,7 +468,7 @@ mod hardware {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .clone();
-            let line = transcriber.transcribe(&samples).expect("transcribe");
+            let line = transcriber.transcribe(&name, &samples).expect("transcribe");
             println!("{name}: {} samples -> {line:?}", samples.len());
             if let Some(text) = line {
                 heard.push((name, text));
