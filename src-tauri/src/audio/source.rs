@@ -221,6 +221,17 @@ fn set_state(status: &SharedStatus, state: SourceState) {
     }
 }
 
+/// Whether a stream error means the stream is gone and must be rebuilt.
+///
+/// Since cpal 0.18 the error callback also carries non-fatal reports: Core
+/// Audio's processor-overload notification arrives as [`cpal::ErrorKind::Xrun`]
+/// while the stream keeps running. Treating that as a failure tore down a
+/// healthy microphone, and xruns recurring within [`STABLE_AFTER`] of each
+/// rebuild would eventually make the supervisor give up on it.
+const fn is_fatal(kind: cpal::ErrorKind) -> bool {
+    !matches!(kind, cpal::ErrorKind::Xrun)
+}
+
 fn build_stream<F>(
     device: &CaptureDevice,
     status: &SharedStatus,
@@ -265,9 +276,13 @@ where
                 }
                 on_samples(&samples);
             },
-            move |err| {
-                log::error!("[source] stream error: {err}");
-                failed_for_cb.store(true, Ordering::Relaxed);
+            move |err: cpal::Error| {
+                if is_fatal(err.kind()) {
+                    log::error!("[source] stream error: {err}");
+                    failed_for_cb.store(true, Ordering::Relaxed);
+                } else {
+                    log::warn!("[source] {err} (stream kept running)");
+                }
             },
             None,
         )
@@ -288,6 +303,14 @@ mod tests {
             name: "Definitely Not A Real Device".into(),
             direction: Direction::Input,
         }
+    }
+
+    #[test]
+    fn an_xrun_does_not_rebuild_the_stream_but_losing_the_device_does() {
+        assert!(!is_fatal(cpal::ErrorKind::Xrun));
+        assert!(is_fatal(cpal::ErrorKind::DeviceNotAvailable));
+        assert!(is_fatal(cpal::ErrorKind::StreamInvalidated));
+        assert!(is_fatal(cpal::ErrorKind::BackendError));
     }
 
     #[test]
