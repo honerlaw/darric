@@ -1,7 +1,7 @@
 # Proposal: mic-stream-outlives-recording
 
 **Date**: 2026-10-14
-**Status**: Draft
+**Status**: Shipped (2026-10-14)
 
 ## Goal
 
@@ -37,25 +37,43 @@ filed as a follow-up.
 
 ## Approach
 
-1. **Upgrade cpal to 0.18.2** in `src-tauri/Cargo.toml` (`cpal = "0.18"`). Migrate darric's two
-   cpal call sites, `audio/device.rs` and `audio/source.rs`:
-   - Replace the deprecated `device.name()` with `device.description()` → its `name()`. **Device
-     identity stays the human-readable name**, because `capture.disabled_devices` (persisted in
-     `settings`) and `transcript_lines.device_id` are keyed by it. Switching to cpal's new
-     stable `id()` would silently orphan every persisted disabled device.
-   - Replace `SampleRate` struct access (`.0`) with the `u32` alias.
-   - Pass `StreamConfig` by value.
-   - Adapt to the unified `cpal::Error` type where errors are stringified.
-   - Keep the explicit `stream.play()`. 0.18 no longer auto-starts streams.
-2. **Regression test (hardware, `#[ignore]`d)** in `audio/source.rs`. It runs `run_source` on
-   the default input device in a thread, waits until at least one callback has arrived, sets
-   `shutdown`, joins the thread, waits ~1 s, and asserts that no callback ran after the join.
-   It is written and run **before** the upgrade, to show it fails on 0.15.3, and run again
-   after to show it passes.
-3. **Device-attributed whisper logs.** `Transcriber::transcribe` gains a `source: &str`
-   parameter used in its per-segment debug lines (`too short`, `no speech`, `N of M samples are
-speech`, the final line). The pool passes `job.device_name`, and test call sites pass a
-   fixed label.
+What shipped. See [[2026-10-14-bug-a-dropped-cpal-0-15-input-stream-kept-capturing]] for the
+root cause.
+
+1. **cpal 0.15.3 → 0.18.2** (`src-tauri/Cargo.toml` `cpal = "0.18"`, lock resolves `0.18.2`).
+   The migration touched only `audio/device.rs` and `audio/source.rs`:
+   - Device identity moved into one helper, `audio::device::device_name`
+     (`description().name()`), used by enumeration, `build_stream`'s device lookup, and the leak
+     test. It stays the human-readable name; see
+     [[2026-10-14-decision-input-device-identity-stays-the-device-name]].
+   - `sample_rate()` is now a plain `u32`.
+   - `build_input_stream` takes the `StreamConfig` by value.
+   - The explicit `stream.play()` is kept, because 0.18 no longer auto-starts streams.
+2. **Leak regression test** `audio::source::tests::a_stopped_source_delivers_nothing_more`
+   (`#[ignore]`d; needs a mic and the audio-capture grant). It waits up to 5 s for a first
+   callback and panics with a permission hint otherwise. It then stops and joins the source,
+   settles 200 ms, and asserts the shared callback counter does not move over the next second.
+   - On 0.15.3: 39 → 133 after the join, so it failed.
+   - On 0.18.2: three runs of 20/20, 18/18 and 19/19, so it passed.
+   - `audio::device::tests::enumeration_yields_unique_stable_ids` now prints every input name.
+     "MacBook Pro Microphone" was byte-identical on both versions. The iPhone was attached only
+     during the 0.15.3 run.
+3. **Device-attributed whisper logs.** `Transcriber::transcribe(source, samples)` labels all four
+   per-segment debug lines (`too short`, `no speech`, `N of M samples are speech`, and the final
+   line). The pool passes `job.device_name`, and the hardware tests pass the tapped device's name.
+4. **Absorbed from review:**
+   - **Xruns no longer rebuild a mic.** cpal 0.18.2 reports CoreAudio processor overloads as
+     `ErrorKind::Xrun` through the error callback while the stream keeps running. `source::is_fatal`
+     now keeps the stream for `Xrun` and rebuilds for every other kind, with a unit test. See
+     [[2026-10-14-constraint-cpal-0-18-reports-xruns-through-the-stream-error-callback]].
+   - **A recording's own tap is no longer listed as a mic.** The exclusion filter compared device
+     names with the registry's aggregate UIDs, so during a recording
+     `"Darric Tap — MacBook Pro Speakers"` was enumerated as an input. It now compares cpal
+     0.18's `device.id()` (the Core Audio UID). The ignored test
+     `a_registered_tap_is_not_listed_as_a_microphone` failed before the fix and passes after. See
+     [[2026-10-14-bug-the-tap-exclusion-filter-compared-device-names-to-uids]].
+   - Stale comments in `device.rs` about cpal having no output capture and no input UID were
+     corrected.
 
 ### Candidate approaches considered
 
@@ -129,3 +147,7 @@ speech`, the final line). The pool passes `job.device_name`, and test call sites
   `excluded.contains(&name)`, but the registry holds aggregate **UIDs** (`darric-tap-<uuid>`),
   not names. That filter may never match. It is adjacent and out of scope, and goes in the
   speaker-capture follow-up issue.
+
+## Deferred work
+
+- #55 — speaker capture goes silent mid-call: the output tap stays alive but stops hearing the meeting app (priority: high)
