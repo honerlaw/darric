@@ -1,14 +1,16 @@
 //! Enumeration of the machine's capture devices.
 //!
-//! Inputs are enumerated through `cpal`; outputs through Core Audio, since
-//! `cpal` has no notion of capturing them.
+//! Inputs are enumerated through `cpal`; outputs through Core Audio directly,
+//! because each one is captured by this app's own process tap ([`super::tap`]).
 //!
 //! [`ExclusionRegistry`] is what stops the app recording itself. Tapping an
 //! output device requires an aggregate device, aggregates are ordinary
 //! `AudioObjectID`s, and `cpal`'s macOS backend walks exactly that list. The
 //! aggregates are created *private*, which hides them from other processes —
 //! but not from this one, which is the process doing the enumerating. So each
-//! tap registers its aggregate's UID here and input enumeration filters it out.
+//! tap registers its aggregate's UID here, and input enumeration filters on
+//! each device's UID (cpal's `id()`) — not its name, which for an aggregate is
+//! "Darric Tap — …" and never matches.
 
 use super::coreaudio;
 use crate::transcription::pool::Direction;
@@ -19,8 +21,8 @@ use std::sync::{Arc, Mutex};
 /// A device the recorder can draw audio from.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CaptureDevice {
-    /// Stable within a run. `cpal` exposes no UID for inputs, so the name is the
-    /// identity; phase 3's outputs will use their Core Audio UID.
+    /// For inputs, the device's name (see [`device_name`] for why not its UID);
+    /// for outputs, its Core Audio UID.
     pub id: String,
     pub name: String,
     pub direction: Direction,
@@ -79,6 +81,19 @@ pub fn list_output_devices(excluded: &ExclusionRegistry) -> Vec<CaptureDevice> {
         .collect()
 }
 
+/// The name a cpal device is known by: its id in this app, persisted in
+/// `capture.disabled_devices` and on every transcript line.
+///
+/// This is cpal's human-readable description name, deliberately not its
+/// stable `id()` (the Core Audio UID). The description name reads
+/// `kAudioDevicePropertyDeviceNameCFString`, exactly as the pre-0.17 `name()`
+/// did, so the strings are byte-identical across the cpal upgrade; switching
+/// the identity to `id()` would silently orphan every device a user has
+/// already disabled and every transcript line's `device_id`.
+pub fn device_name(device: &cpal::Device) -> Option<String> {
+    device.description().ok().map(|d| d.name().to_string())
+}
+
 /// Every input device the host reports, minus anything this process created.
 ///
 /// A device whose name cannot be read is skipped rather than given a
@@ -94,11 +109,11 @@ pub fn list_input_devices(excluded: &ExclusionRegistry) -> Vec<CaptureDevice> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for device in devices {
-        let Ok(name) = device.name() else {
+        let Some(name) = device_name(&device) else {
             log::warn!("[devices] skipping an input device with an unreadable name");
             continue;
         };
-        if excluded.contains(&name) {
+        if device.id().is_ok_and(|uid| excluded.contains(uid.id())) {
             log::debug!("[devices] skipping our own device {name}");
             continue;
         }
@@ -145,10 +160,43 @@ mod tests {
         assert!(b.contains("darric-tap-2"));
     }
 
+    /// A tap's private aggregate is visible to this process's own enumeration,
+    /// so the registry is the only thing keeping it off the microphone list.
+    ///
+    /// Ignored by default: it creates a real Core Audio tap, which needs the
+    /// audio-capture permission on the terminal running it.
+    #[test]
+    #[ignore = "creates a real Core Audio tap; needs the audio-capture permission"]
+    fn a_registered_tap_is_not_listed_as_a_microphone() {
+        let registry = ExclusionRegistry::new();
+        let Some(output) = list_output_devices(&registry).into_iter().next() else {
+            panic!("no output device to tap on this machine");
+        };
+        let tap = super::super::tap::OutputTap::start(&output.id, &output.name, |_| {})
+            .expect("start a tap (is audio capture permitted for this terminal?)");
+        registry.register(tap.aggregate_uid());
+
+        let inputs = list_input_devices(&registry);
+        for d in &inputs {
+            println!("input device while tapping: {:?}", d.name);
+        }
+        drop(tap);
+        assert!(
+            inputs.iter().all(|d| !d.name.starts_with("Darric Tap")),
+            "the tap's own aggregate was listed as a microphone"
+        );
+    }
+
     #[test]
     #[ignore = "enumerates real audio hardware"]
     fn enumeration_yields_unique_stable_ids() {
         let devices = list_input_devices(&ExclusionRegistry::new());
+        // Printed so a cpal upgrade can be checked for renamed devices: the
+        // name is the id persisted in `capture.disabled_devices` and on every
+        // transcript line, so a changed string silently orphans both.
+        for d in &devices {
+            println!("input device: {:?}", d.name);
+        }
         let ids: HashSet<&str> = devices.iter().map(|d| d.id.as_str()).collect();
         assert_eq!(ids.len(), devices.len(), "ids must be unique");
         assert!(devices.iter().all(|d| d.direction == Direction::Input));

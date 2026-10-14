@@ -54,10 +54,14 @@ impl Transcriber {
     /// One line of text for `samples`, or `None` when there is nothing to say:
     /// the input is too short, the detector heard no speech, or whisper produced
     /// only whitespace.
-    pub fn transcribe(&self, samples: &[f32]) -> Result<Option<String>> {
+    ///
+    /// `source` names the device the audio came from. It is only used to label
+    /// the log lines: with several devices transcribing at once, an unlabelled
+    /// "no speech" cannot say which device went quiet.
+    pub fn transcribe(&self, source: &str, samples: &[f32]) -> Result<Option<String>> {
         if too_short(samples.len()) {
             log::debug!(
-                "[whisper] {} samples is too short to transcribe",
+                "[whisper] {source}: {} samples is too short to transcribe",
                 samples.len()
             );
             return Ok(None);
@@ -69,11 +73,11 @@ impl Transcriber {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .speech(samples)?;
         let Some(speech) = speech else {
-            log::debug!("[whisper] no speech in {} samples", samples.len());
+            log::debug!("[whisper] {source}: no speech in {} samples", samples.len());
             return Ok(None);
         };
         log::debug!(
-            "[whisper] {} of {} samples are speech",
+            "[whisper] {source}: {} of {} samples are speech",
             speech.len(),
             samples.len()
         );
@@ -106,7 +110,7 @@ impl Transcriber {
             );
         }
         let line = join_pieces(pieces.iter().map(String::as_str));
-        log::debug!("[whisper] {line:?}");
+        log::debug!("[whisper] {source}: {line:?}");
         Ok(line)
     }
 }
@@ -326,7 +330,7 @@ mod accuracy {
         let t = Transcriber::new(path.to_str().expect("utf-8 path")).expect("load models");
 
         for (label, samples) in &silent_cases() {
-            let line = t.transcribe(samples).expect("transcribe");
+            let line = t.transcribe("test", samples).expect("transcribe");
             println!("{label}: {line:?}");
             assert_eq!(line, None, "{label} must produce no line");
         }
@@ -346,7 +350,7 @@ mod accuracy {
             ("speech plus noise rms 0.01", noisy),
         ];
         for (label, samples) in &spoken_cases {
-            let line = t.transcribe(samples).expect("transcribe");
+            let line = t.transcribe("test", samples).expect("transcribe");
             println!("{label}: {line:?}");
             let line = line.unwrap_or_default().to_lowercase();
             assert!(
@@ -393,7 +397,7 @@ mod pipeline {
 
         let mut lines = Vec::new();
         for s in &segments {
-            let line = t.transcribe(&s.samples).expect("transcribe");
+            let line = t.transcribe("test", &s.samples).expect("transcribe");
             println!(
                 "{} ms at {} -> {line:?}",
                 s.samples.len() * 1_000 / 16_000,
@@ -453,11 +457,11 @@ mod bench {
         let seg = spoken();
 
         // Warm up so model load and first-run Metal setup are not counted.
-        t.transcribe(&seg).expect("warm-up transcription");
+        t.transcribe("test", &seg).expect("warm-up transcription");
 
         let start = Instant::now();
         for _ in 0..N {
-            t.transcribe(&seg).expect("serial transcription");
+            t.transcribe("test", &seg).expect("serial transcription");
         }
         let serial = start.elapsed();
 
@@ -466,7 +470,9 @@ mod bench {
             .map(|_| {
                 let t = Arc::clone(&t);
                 let seg = seg.clone();
-                std::thread::spawn(move || t.transcribe(&seg).expect("parallel transcription"))
+                std::thread::spawn(move || {
+                    t.transcribe("test", &seg).expect("parallel transcription")
+                })
             })
             .collect();
         for h in handles {

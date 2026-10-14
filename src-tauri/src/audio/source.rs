@@ -17,7 +17,7 @@
 //! a thread boundary behind an `unsafe impl Send` wrapper; keeping it on one
 //! thread removes that unsafety rather than asserting past it.
 
-use super::device::CaptureDevice;
+use super::device::{device_name, CaptureDevice};
 use super::resample;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -221,6 +221,17 @@ fn set_state(status: &SharedStatus, state: SourceState) {
     }
 }
 
+/// Whether a stream error means the stream is gone and must be rebuilt.
+///
+/// Since cpal 0.18 the error callback also carries non-fatal reports: Core
+/// Audio's processor-overload notification arrives as [`cpal::ErrorKind::Xrun`]
+/// while the stream keeps running. Treating that as a failure tore down a
+/// healthy microphone, and xruns recurring within [`STABLE_AFTER`] of each
+/// rebuild would eventually make the supervisor give up on it.
+const fn is_fatal(kind: cpal::ErrorKind) -> bool {
+    !matches!(kind, cpal::ErrorKind::Xrun)
+}
+
 fn build_stream<F>(
     device: &CaptureDevice,
     status: &SharedStatus,
@@ -234,11 +245,11 @@ where
     let target = host
         .input_devices()
         .map_err(|e| e.to_string())?
-        .find(|d| d.name().is_ok_and(|n| n == device.name))
+        .find(|d| device_name(d).is_some_and(|n| n == device.name))
         .ok_or_else(|| format!("device {} not present", device.name))?;
 
     let supported = target.default_input_config().map_err(|e| e.to_string())?;
-    let sample_rate = supported.sample_rate().0;
+    let sample_rate = supported.sample_rate();
     let channels = supported.channels();
 
     log::info!(
@@ -257,7 +268,7 @@ where
 
     let stream = target
         .build_input_stream(
-            &supported.into(),
+            supported.into(),
             move |data: &[f32], _: &cpal::InputCallbackInfo| {
                 let samples = resampler.process(data);
                 if let Ok(mut s) = status_for_cb.try_lock() {
@@ -265,9 +276,13 @@ where
                 }
                 on_samples(&samples);
             },
-            move |err| {
-                log::error!("[source] stream error: {err}");
-                failed_for_cb.store(true, Ordering::Relaxed);
+            move |err: cpal::Error| {
+                if is_fatal(err.kind()) {
+                    log::error!("[source] stream error: {err}");
+                    failed_for_cb.store(true, Ordering::Relaxed);
+                } else {
+                    log::warn!("[source] {err} (stream kept running)");
+                }
             },
             None,
         )
@@ -288,6 +303,14 @@ mod tests {
             name: "Definitely Not A Real Device".into(),
             direction: Direction::Input,
         }
+    }
+
+    #[test]
+    fn an_xrun_does_not_rebuild_the_stream_but_losing_the_device_does() {
+        assert!(!is_fatal(cpal::ErrorKind::Xrun));
+        assert!(is_fatal(cpal::ErrorKind::DeviceNotAvailable));
+        assert!(is_fatal(cpal::ErrorKind::StreamInvalidated));
+        assert!(is_fatal(cpal::ErrorKind::BackendError));
     }
 
     #[test]
@@ -501,5 +524,76 @@ mod tests {
         handle.join().expect("supervisor thread should exit");
 
         assert_eq!(status.lock().unwrap().state, SourceState::Failed);
+    }
+
+    /// The reported bug: a recording that had been stopped kept its microphone
+    /// open, and the callback went on feeding a shut-down pool for hours.
+    /// cpal 0.15's CoreAudio stream held a strong reference to itself in its
+    /// own disconnect listener, so dropping it never stopped the audio unit.
+    ///
+    /// Ignored by default: it opens the default input device, which needs a
+    /// microphone and the audio-capture permission on the terminal running it.
+    /// Run with:
+    ///   cargo test --manifest-path src-tauri/Cargo.toml --lib a_stopped_source -- --ignored --nocapture
+    #[test]
+    #[ignore = "opens the default input device; needs a microphone and capture permission"]
+    fn a_stopped_source_delivers_nothing_more() {
+        use std::sync::atomic::AtomicUsize;
+
+        let Some(input) = cpal::default_host().default_input_device() else {
+            panic!("no default input device on this machine");
+        };
+        let name = device_name(&input).expect("default input device name");
+        let device = CaptureDevice {
+            id: name.clone(),
+            name,
+            direction: Direction::Input,
+        };
+        println!("capturing from {:?}", device.name);
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let status: SharedStatus = Arc::new(Mutex::new(SourceStatus::new(device.clone())));
+        let shutdown = Arc::new(AtomicBool::new(false));
+
+        let handle = {
+            let calls = Arc::clone(&calls);
+            let status = Arc::clone(&status);
+            let shutdown = Arc::clone(&shutdown);
+            std::thread::spawn(move || {
+                run_source(&device, &status, &shutdown, move |_| {
+                    calls.fetch_add(1, Ordering::Relaxed);
+                });
+            })
+        };
+
+        // A missing permission does not fail the stream; it simply never
+        // delivers. That must read as "could not test", never as a pass.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while calls.load(Ordering::Relaxed) == 0 {
+            assert!(
+                Instant::now() < deadline,
+                "no callbacks — is audio capture permitted for this terminal?"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let before_stop = calls.load(Ordering::Relaxed);
+
+        shutdown.store(true, Ordering::Relaxed);
+        handle.join().expect("supervisor thread");
+
+        // Let a callback already in flight at the join finish before counting.
+        std::thread::sleep(Duration::from_millis(200));
+        let after_join = calls.load(Ordering::Relaxed);
+        std::thread::sleep(Duration::from_secs(1));
+        let a_second_later = calls.load(Ordering::Relaxed);
+        println!(
+            "callbacks: {before_stop} before stop, {after_join} after join, \
+             {a_second_later} one second later"
+        );
+
+        assert_eq!(
+            after_join, a_second_later,
+            "the stream kept delivering after its source stopped"
+        );
     }
 }

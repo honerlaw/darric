@@ -226,7 +226,7 @@ fn worker_loop(
     sink: &dyn Fn(TranscribedLine),
 ) {
     while let Some(job) = shared.take() {
-        match transcriber.transcribe(&job.samples) {
+        match transcriber.transcribe(&job.device_name, &job.samples) {
             Ok(Some(text)) => sink(TranscribedLine {
                 device_id: job.device_id,
                 device_name: job.device_name,
